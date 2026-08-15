@@ -1,0 +1,138 @@
+"""report.py — Capa de reporte.
+
+Regenera, de forma determinista y con un solo comando, el resumen de desempeño
+de una estrategia: equity curve, Sharpe, max drawdown y distribución de
+retornos. Reproducibilidad total: mismas entradas -> mismo reporte.
+
+Salida en markdown por defecto (legible y diffeable).
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+from src import config, engine
+
+
+def equity_curve(returns: pd.Series) -> pd.Series:
+    """Curva de capital (base 1.0) a partir de retornos simples."""
+    return (1.0 + returns.fillna(0.0)).cumprod()
+
+
+def max_drawdown(returns: pd.Series) -> float:
+    """Máximo drawdown (fracción negativa, p. ej. -0.23) de la equity curve."""
+    eq = equity_curve(returns)
+    peak = eq.cummax()
+    dd = eq / peak - 1.0
+    return float(dd.min()) if len(dd) else 0.0
+
+
+def return_distribution(returns: pd.Series, bins: int = 10) -> pd.Series:
+    """Histograma de retornos: conteo por bucket (determinista)."""
+    r = returns.replace([np.inf, -np.inf], np.nan).dropna()
+    if r.empty:
+        return pd.Series(dtype=int)
+    counts, edges = np.histogram(r.to_numpy(), bins=bins)
+    labels = [f"[{edges[i]:+.4f}, {edges[i + 1]:+.4f})" for i in range(len(counts))]
+    return pd.Series(counts, index=labels, name="count")
+
+
+def metrics(returns: pd.Series) -> dict:
+    """Métricas mínimas del reporte."""
+    eq = equity_curve(returns)
+    return {
+        "n_obs": int(returns.dropna().shape[0]),
+        "sharpe": engine.sharpe(returns),
+        "max_drawdown": max_drawdown(returns),
+        "total_return": float(eq.iloc[-1] - 1.0) if len(eq) else 0.0,
+        "mean_daily": float(returns.mean()) if len(returns) else 0.0,
+        "std_daily": float(returns.std(ddof=0)) if len(returns) else 0.0,
+        "final_equity": float(eq.iloc[-1]) if len(eq) else 1.0,
+    }
+
+
+def render(returns: pd.Series, name: str = "strategy") -> str:
+    """Reporte markdown determinista (sin timestamps)."""
+    m = metrics(returns)
+    lines = [
+        f"# Reporte de desempeño — {name}",
+        "",
+        "## Métricas",
+        "",
+        "| Métrica | Valor |",
+        "|---|---|",
+        f"| Observaciones | {m['n_obs']} |",
+        f"| Sharpe (anualizado) | {m['sharpe']:.4f} |",
+        f"| Max drawdown | {m['max_drawdown']:.4f} |",
+        f"| Retorno total | {m['total_return']:.4f} |",
+        f"| Equity final (base 1.0) | {m['final_equity']:.4f} |",
+        f"| Media diaria | {m['mean_daily']:.6f} |",
+        f"| Desv. estándar diaria | {m['std_daily']:.6f} |",
+        "",
+        "## Equity curve (muestreada)",
+        "",
+    ]
+    eq = equity_curve(returns)
+    if len(eq):
+        # Muestrear hasta ~20 puntos para un reporte compacto y determinista.
+        step = max(1, len(eq) // 20)
+        sampled = eq.iloc[::step]
+        lines.append("| Fecha | Equity |")
+        lines.append("|---|---|")
+        for ts, val in sampled.items():
+            label = ts.date() if hasattr(ts, "date") else ts
+            lines.append(f"| {label} | {val:.4f} |")
+    lines += ["", "## Distribución de retornos", "", "| Bucket | Conteo |", "|---|---|"]
+    for label, count in return_distribution(returns).items():
+        lines.append(f"| {label} | {int(count)} |")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def generate(
+    returns: pd.Series, name: str = "strategy", out_dir: Path = config.RESULTS
+) -> Path:
+    """Escribe el reporte a `results/<name>/report.md` y devuelve la ruta."""
+    dest = out_dir / name
+    dest.mkdir(parents=True, exist_ok=True)
+    path = dest / "report.md"
+    path.write_text(render(returns, name), encoding="utf-8")
+    return path
+
+
+def _load_prices() -> pd.DataFrame | None:
+    """Carga precios de cierre de `data/clean/` si existen, uno por columna."""
+    files = sorted(config.DATA_CLEAN.glob("*.parquet"))
+    if not files:
+        return None
+    cols = {}
+    for f in files:
+        df = pd.read_parquet(f)
+        close = df["close"] if "close" in df.columns else df.iloc[:, 0]
+        cols[f.stem] = close
+    return pd.DataFrame(cols).sort_index()
+
+
+def main() -> int:
+    from src import signals
+
+    prices = _load_prices()
+    if prices is None:
+        print(
+            f"No hay parquets en {config.DATA_CLEAN}. Corre `python -m src.loaders` "
+            "primero (con crudos en data/raw/)."
+        )
+        return 0
+    weights = signals.buy_and_hold(prices)
+    returns = engine.backtest(prices, weights)
+    path = generate(returns, name="buy_and_hold")
+    print(render(returns, name="buy_and_hold"))
+    print(f"\nReporte escrito en {path}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
