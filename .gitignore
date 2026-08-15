@@ -1,0 +1,22 @@
+# Datos derivados y resultados (regenerables) — data/raw/ NO se ignora (inmutable)
+/data/clean/*
+!/data/clean/.gitkeep
+/results/*
+!/results/.gitkeep
+/data/quality_report.md
+
+# Python / uv
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
