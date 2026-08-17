@@ -81,3 +81,43 @@ SHARPE_REFERENCE = SharpeReference(
 
 # Días de trading al año, para anualizar Sharpe.
 TRADING_DAYS_PER_YEAR = 252
+
+
+# --- Reglas de la firma de fondeo (parametrizadas; NO hardcodear una firma) ---
+@dataclass(frozen=True)
+class FirmRules:
+    """Reglas de un challenge de cuenta de fondeo.
+
+    Todas las magnitudes de barrera se expresan como FRACCIÓN del capital
+    inicial (p. ej. 0.10 = 10%). El drawdown es ESTÁTICO (contra capital
+    inicial, no trailing — documento maestro sección 2.2).
+    """
+
+    phase1_target: float = 0.10        # objetivo fase 1 (+10%)
+    phase2_target: float = 0.05        # objetivo fase 2 (+5%)
+    daily_loss_limit: float = 0.05     # límite de pérdida diaria (5%)
+    max_drawdown: float = 0.10         # drawdown máximo estático (10%)
+    n_payouts: int = 4                 # nº de payouts N para "quemar cuenta"
+    fee: float = 500.0                 # costo de la cuota del challenge (USD)
+    payout_per_cycle: float = 1000.0   # payout esperado por ciclo tras fondeo (USD)
+
+
+DEFAULT_FIRM_RULES = FirmRules()
+
+
+# --- Parámetros del simulador de barrera (challenge.py) ---
+@dataclass(frozen=True)
+class SimulatorParams:
+    """Configuración del simulador de barrera por block bootstrap."""
+
+    block_size: int = 20               # tamaño de bloque (>1; ~1 mes de trading)
+    n_bootstraps: int = 10_000         # nº de trayectorias simuladas
+    horizon_days: int = 252            # horizonte máximo por fase (días)
+    seed: int = 12345                  # semilla para reproducibilidad
+    # Malla de apalancamiento: multiplicadores k evaluados para la curva P(pasar).
+    leverage_min: float = 0.25
+    leverage_max: float = 3.0
+    leverage_step: float = 0.25
+
+
+DEFAULT_SIM_PARAMS = SimulatorParams()

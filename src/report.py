@@ -54,8 +54,37 @@ def metrics(returns: pd.Series) -> dict:
     }
 
 
-def render(returns: pd.Series, name: str = "strategy") -> str:
-    """Reporte markdown determinista (sin timestamps)."""
+def render_challenge(result) -> str:
+    """Sección markdown con los resultados del simulador de barrera."""
+    lines = [
+        "## Challenge (simulador de barrera)",
+        "",
+        "| Métrica | Valor |",
+        "|---|---|",
+        f"| P(pasar fase 1) | {result.p_phase1:.4f} |",
+        f"| P(pasar fase 2) | {result.p_phase2:.4f} |",
+        f"| P(pasar ambas) | {result.p_both:.4f} |",
+        f"| Días esperados hasta pasar | {result.expected_days_to_pass:.1f} |",
+        f"| P(quemar antes del payout N) | {result.p_burn_before_payout:.4f} |",
+        f"| Valor esperado neto de cuotas | {result.expected_net_value:.2f} |",
+        f"| Apalancamiento óptimo | {result.optimal_leverage:.2f}× |",
+        "",
+    ]
+    if result.leverage_grid.size:
+        lines += ["### Curva P(pasar) vs apalancamiento", "", "| Leverage | P(ambas) |", "|---|---|"]
+        for k, p in zip(result.leverage_grid, result.leverage_pass_curve):
+            mark = "  ← óptimo" if abs(k - result.optimal_leverage) < 1e-9 else ""
+            lines.append(f"| {k:.2f}× | {p:.4f}{mark} |")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def render(returns: pd.Series, name: str = "strategy", challenge_result=None) -> str:
+    """Reporte markdown determinista (sin timestamps).
+
+    Si se pasa `challenge_result` (de challenge.simulate_challenge), se anexa la
+    sección del simulador de barrera.
+    """
     m = metrics(returns)
     lines = [
         f"# Reporte de desempeño — {name}",
@@ -89,17 +118,22 @@ def render(returns: pd.Series, name: str = "strategy") -> str:
     for label, count in return_distribution(returns).items():
         lines.append(f"| {label} | {int(count)} |")
     lines.append("")
+    if challenge_result is not None:
+        lines.append(render_challenge(challenge_result))
     return "\n".join(lines)
 
 
 def generate(
-    returns: pd.Series, name: str = "strategy", out_dir: Path = config.RESULTS
+    returns: pd.Series,
+    name: str = "strategy",
+    out_dir: Path = config.RESULTS,
+    challenge_result=None,
 ) -> Path:
     """Escribe el reporte a `results/<name>/report.md` y devuelve la ruta."""
     dest = out_dir / name
     dest.mkdir(parents=True, exist_ok=True)
     path = dest / "report.md"
-    path.write_text(render(returns, name), encoding="utf-8")
+    path.write_text(render(returns, name, challenge_result=challenge_result), encoding="utf-8")
     return path
 
 

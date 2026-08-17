@@ -2,8 +2,6 @@
 
 import importlib
 
-import pytest
-
 from src import config
 
 
@@ -31,8 +29,9 @@ def test_modules_importable():
         importlib.import_module(f"src.{name}")
 
 
-def test_challenge_is_stub():
+def test_challenge_module_exposes_simulator():
+    # challenge.py ya está implementado (Bloque B); antes era un stub.
     from src import challenge
 
-    with pytest.raises(NotImplementedError):
-        challenge.simulate_challenge()
+    assert callable(challenge.simulate_challenge)
+    assert callable(challenge.analytic_pass_probability)
