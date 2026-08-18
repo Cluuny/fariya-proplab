@@ -114,6 +114,41 @@ def test_detect_calendar_gap():
     assert any(a.kind == "calendar_gap" for a in report.anomalies)
 
 
+def _kinds(report):
+    return {a.kind for a in report.anomalies}
+
+
+def test_contract_jump_is_open_gap_not_anomalous_return():
+    # Cierres suaves (sin retorno close-to-close anómalo) pero un GAP de apertura
+    # grande en un día → contract_jump, NO anomalous_return.
+    dates = pd.bdate_range("2020-01-01", periods=60)
+    rng = np.random.default_rng(0)
+    close = 100 + np.cumsum(rng.normal(0, 0.05, 60))   # muy suave
+    open_ = close.copy()
+    open_[30] = close[29] * 1.30                        # gap de apertura +30%
+    df = pd.DataFrame({"open": open_, "close": close},
+                      index=pd.DatetimeIndex(dates, name="date"))
+    kinds = _kinds(loaders.validate("X", df))
+    assert "contract_jump" in kinds
+    assert "anomalous_return" not in kinds
+
+
+def test_anomalous_return_without_open_gap():
+    # Outlier close-to-close pero SIN gap de apertura (open_t = close_{t-1}) →
+    # anomalous_return, NO contract_jump. Ya no coinciden.
+    dates = pd.bdate_range("2020-01-01", periods=60)
+    close = np.full(60, 100.0)
+    close[30] = 150.0                                   # salto close-to-close
+    open_ = np.empty(60)
+    open_[0] = close[0]
+    open_[1:] = close[:-1]                              # apertura = cierre previo
+    df = pd.DataFrame({"open": open_, "close": close},
+                      index=pd.DatetimeIndex(dates, name="date"))
+    kinds = _kinds(loaders.validate("X", df))
+    assert "anomalous_return" in kinds
+    assert "contract_jump" not in kinds
+
+
 def test_report_renders_all_instruments(clean_series):
     raw, clean = clean_series
     reports = loaders.run(raw_dir=raw, clean_dir=clean)

@@ -126,15 +126,27 @@ def clean(df: pd.DataFrame) -> pd.DataFrame:
 # --------------------------------------------------------------------------- #
 # Quality validation                                                          #
 # --------------------------------------------------------------------------- #
-def _detect_contract_jumps(returns: pd.Series, sigma: float) -> pd.Index:
-    """Abrupt jumps that may indicate a contract change: return > `sigma`·σ.
+def _detect_contract_jumps(df: pd.DataFrame, sigma: float) -> pd.Index:
+    """Session-open gaps that may indicate a contract rollover.
 
-    Reported as flags for human review, not corrected.
+    Distinct from close-to-close anomalous returns: a rollover shows as an
+    overnight GAP between the previous close and the next open, not as an
+    intraday-to-intraday return (which `anomalous_return` already covers). This
+    avoids counting the same event twice. Requires an `open` column; returns
+    empty if absent (never re-flags the returns). Flagged for human review.
     """
-    if returns.std(ddof=0) == 0 or returns.dropna().empty:
-        return returns.index[:0]
-    z = (returns - returns.mean()) / returns.std(ddof=0)
-    return returns.index[z.abs() > sigma]
+    if "open" not in df.columns:
+        return df.index[:0]
+    close = _close_series(df)
+    open_ = pd.to_numeric(df["open"], errors="coerce")
+    prev_close = close.shift(1)
+    gap = np.log(open_.where(open_ > 0) / prev_close.where(prev_close > 0))
+    g = gap.dropna()
+    std = g.std(ddof=0)
+    if g.empty or std == 0 or np.isnan(std):
+        return df.index[:0]
+    z = (gap - g.mean()) / std
+    return df.index[z.abs() > sigma]
 
 
 def validate(
@@ -175,8 +187,8 @@ def validate(
                 Anomaly(instrument, ts, "anomalous_return", f"z={z.loc[ts]:.1f}")
             )
 
-    # Contract-change jumps (flag for human review).
-    for ts in _detect_contract_jumps(returns, sigma):
+    # Contract-change jumps: overnight open gaps (distinct from anomalous_return).
+    for ts in _detect_contract_jumps(df, sigma):
         anomalies.append(Anomaly(instrument, ts, "contract_jump"))
 
     # Calendar gaps: business days (Mon-Fri) with no observation.
