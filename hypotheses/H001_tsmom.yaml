@@ -80,13 +80,17 @@ sizing: >
   instrumento). Luego un escalado GLOBAL del portafolio para apuntar a ~8% de
   volatilidad anual de PORTAFOLIO (documento §1.2), NO 10% por instrumento.
   EX-ANTE (obligatorio): ese escalado es un ESCALAR RODANTE que en cada fecha usa
-  SÓLO la vol de portafolio observada hasta esa fecha (p. ej. vol a 63 días de la
-  serie de retornos de portafolio con w.shift(1)), NUNCA la vol realizada de toda
-  la serie —eso sería look-ahead en la capa de señal, que el guard del motor no
-  atrapa. No afecta al falsador (el Sharpe es invariante al escalado) pero un
-  backtest con look-ahead en el sizing ensucia el diagnóstico del simulador.
-  Exposición bruta acotada por config.MAX_GROSS_EXPOSURE (=4); si el escalado a
-  8% excede el bruto máximo, se recorta y se documenta.
+  SÓLO la vol de portafolio observada hasta esa fecha, NUNCA la vol realizada de
+  toda la serie —eso sería look-ahead en la capa de señal, que el guard del motor
+  no atrapa. Se resuelve en UN PASO, sin iterar (la aparente circularidad
+  vol↔escalar no requiere bucle de convergencia): (1) construir la serie de
+  retornos del portafolio SIN escalar con los pesos de vol-inversa normalizados;
+  (2) estimar su vol rodante a 63 días (anualizada), desplazada 1 día para usar
+  sólo info hasta t-1; (3) escalar = vol_target(8%) / vol_estimada. No afecta al
+  falsador (el Sharpe es invariante al escalado) pero un backtest con look-ahead
+  en el sizing ensucia el diagnóstico del simulador. Exposición bruta acotada por
+  config.MAX_GROSS_EXPOSURE (=4); si el escalado a 8% excede el bruto máximo, se
+  recorta ESE día y se documenta.
 universo_test:
   # DOS muestras REPORTADAS POR SEPARADO (no una corrida agrupada): agrupado no se
   # puede atribuir un buen resultado a un régimen ni VER la degradación post-2010.
@@ -106,12 +110,17 @@ costos: >
   (errar hacia abajo es el lado seguro). Es bloqueante de H002/carry, no de H001.
 sensibilidad_costos:
   # El swap es un placeholder; el veredicto no debe depender de él sin decirlo.
+  # Y sensibilidad debe ser sensibilidad, NO seis oportunidades de cruzar 0.4:
+  # con 3 swaps × 2 muestras serían 6 tiros al mismo blanco (multiplicidad).
   swap_bp_dia: [0.0, 0.3, 1.0]
+  especificacion_primaria: 0.3   # el VEREDICTO de cada muestra se dicta SOBRE ESTA
   regla: >
-    Las tres corridas se reportan. Si el veredicto cambia de lado del falsador
-    dentro de este rango, el veredicto es sobre el PLACEHOLDER de swap y NO sobre
-    la estrategia, y se declara así explícitamente (no se elige la corrida que
-    guste).
+    El veredicto de cada muestra se dicta con swap=0.3 bp/día (especificación
+    primaria). Las corridas con 0.0 y 1.0 son DIAGNÓSTICO de robustez: se
+    reportan siempre, pero NO son oportunidades adicionales de promover. Si el
+    veredicto cambiaría de lado del falsador dentro del rango [0.0, 1.0], se
+    declara que el veredicto es sobre el PLACEHOLDER de swap y no sobre la
+    estrategia (no se elige la corrida que guste).
 holdout: exento
 holdout_razon: >
   H001 es una replicación de un efecto publicado (paper 1965-2009) SIN tuneo sobre
@@ -149,9 +158,19 @@ zona_marginal:
   decision: un_chequeo_robustez
   regla: >
     Se corre UNA sola variante pre-especificada —lookback de 6 meses en vez de
-    12— contada como intento (intentos_realizados pasa a 2), y se reporta el
-    DEFLATED Sharpe (corrección por multiplicidad). NINGUNA variante más: ni
-    tuneo de vol target, ni de umbrales, ni de instrumentos.
+    12— y se reporta el DEFLATED Sharpe (corrección por multiplicidad). NINGUNA
+    variante más: ni tuneo de vol target, ni de umbrales, ni de instrumentos.
+  conteo_intentos: >
+    intentos_realizados = 4 cuando se dispara el chequeo: 2 lookbacks (12m, 6m) ×
+    2 muestras (A, B) = 4 configuraciones genuinas de la hipótesis. Las 3 corridas
+    de swap NO cuentan (son sensibilidad de la MISMA especificación, no hipótesis
+    distintas). Subestimar el conteo infla el deflated Sharpe —justo el sesgo que
+    la corrección elimina. (Sin chequeo, intentos = 2: 12m × 2 muestras.)
+  regla_decision: >
+    Promueve SÓLO si el DEFLATED Sharpe (con N = intentos_realizados) de la mejor
+    variante supera 0.4. Si no, estado = parked: nota escrita, cero trabajo
+    adicional; se revisa únicamente si el portafolio de la sem 10 la necesita como
+    diversificador. El deflated Sharpe es criterio, no adorno.
 FALSADOR: >
   Falsador de nivel: si el Sharpe NETO < 0.2 en una muestra, H001 se descarta en
   ese régimen y NO se reintenta con variantes (salvo el único chequeo de
@@ -177,3 +196,11 @@ enmiendas:
       [0.2,0.4] (un chequeo de robustez); resultado_esperado con derivación
       Grinold-Kahn y dirección por desviación; sensibilidad al swap; vol-targeting
       ex-ante; rebalanceo y alineación deterministas.
+  - fecha: 2026-08-18
+    tipo: pre_ejecucion            # sigue intentos_realizados=0, fecha_test=null
+    que: >
+      Especificación primaria del swap = 0.3 bp (el veredicto se dicta sobre ésta,
+      no 6 tiros al blanco); regla de decisión de la zona marginal (promueve sólo
+      si el deflated Sharpe > 0.4, si no parked); conteo de intentos = 4 (2
+      lookbacks × 2 muestras, swaps no cuentan) para no inflar el deflated Sharpe;
+      recipe ex-ante del escalar en un solo paso (sin bucle de convergencia).
