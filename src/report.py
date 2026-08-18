@@ -62,19 +62,32 @@ def render_challenge(result) -> str:
         "| Métrica | Valor |",
         "|---|---|",
         f"| P(pasar fase 1) | {result.p_phase1:.4f} |",
+        f"| P(fallar fase 1) | {result.p_fail:.4f} |",
+        f"| P(sin absorber fase 1) | {result.p_unresolved:.4f} |",
         f"| P(pasar fase 2) | {result.p_phase2:.4f} |",
         f"| P(pasar ambas) | {result.p_both:.4f} |",
         f"| Días esperados hasta pasar | {result.expected_days_to_pass:.1f} |",
         f"| P(quemar antes del payout N) | {result.p_burn_before_payout:.4f} |",
         f"| Valor esperado neto de cuotas | {result.expected_net_value:.2f} |",
-        f"| Apalancamiento óptimo | {result.optimal_leverage:.2f}× |",
+        f"| Apalancamiento óptimo (decisión) | {result.optimal_leverage:.2f}× |",
+        f"| Horizonte (días) | {result.horizon_days} |",
         "",
     ]
     if result.leverage_grid.size:
-        lines += ["### Curva P(pasar) vs apalancamiento", "", "| Leverage | P(ambas) |", "|---|---|"]
-        for k, p in zip(result.leverage_grid, result.leverage_pass_curve):
+        lines += [
+            "### Curva de apalancamiento",
+            "",
+            "P(pasar) es diagnóstica (monótona con horizonte honesto); el óptimo de "
+            "**decisión** se elige por valor esperado neto, que pone precio al tiempo.",
+            "",
+            "| Leverage | P(ambas) | Valor neto |",
+            "|---|---|---|",
+        ]
+        val = result.leverage_value_curve
+        for i, (k, p) in enumerate(zip(result.leverage_grid, result.leverage_pass_curve)):
+            v = f"{val[i]:.0f}" if i < len(val) else "—"
             mark = "  ← óptimo" if abs(k - result.optimal_leverage) < 1e-9 else ""
-            lines.append(f"| {k:.2f}× | {p:.4f}{mark} |")
+            lines.append(f"| {k:.2f}× | {p:.4f} | {v}{mark} |")
         lines.append("")
     return "\n".join(lines)
 

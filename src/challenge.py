@@ -32,6 +32,12 @@ from src import config
 # --------------------------------------------------------------------------- #
 # Resultado                                                                    #
 # --------------------------------------------------------------------------- #
+# Resultados posibles de una trayectoria (contabilidad de tres resultados).
+UNRESOLVED = 0  # llegó al horizonte sin tocar ninguna barrera
+PASSED = 1      # alcanzó el objetivo
+FAILED = 2      # tocó el límite diario o el drawdown máximo
+
+
 @dataclass
 class ChallengeResult:
     """Salidas del simulador de barrera."""
@@ -42,8 +48,13 @@ class ChallengeResult:
     expected_days_to_pass: float
     p_burn_before_payout: float
     expected_net_value: float
+    # Contabilidad de tres resultados de la fase 1 (suman 1 con p_phase1).
+    p_fail: float = 0.0
+    p_unresolved: float = 0.0
+    horizon_days: int = 0
     leverage_grid: np.ndarray = field(default_factory=lambda: np.array([]))
     leverage_pass_curve: np.ndarray = field(default_factory=lambda: np.array([]))
+    leverage_value_curve: np.ndarray = field(default_factory=lambda: np.array([]))
     optimal_leverage: float = 1.0
 
 
@@ -88,7 +99,14 @@ def block_bootstrap(
 def _first_passage(
     paths: np.ndarray, target: float, daily_loss_limit: float, max_drawdown: float
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Evalúa cada trayectoria de retornos y devuelve (passed, day_index).
+    """Evalúa cada trayectoria y devuelve (outcome, day_index).
+
+    `outcome` es un vector con la CONTABILIDAD DE TRES RESULTADOS:
+    `PASSED` (tocó el objetivo), `FAILED` (tocó el límite diario o el drawdown
+    máximo estático), o `UNRESOLVED` (llegó al final del horizonte sin tocar
+    ninguna barrera). NUNCA se pliega UNRESOLVED en FAILED: plegarlo invertiría
+    la conclusión del sistema (baja volatilidad tarda más en absorber y quedaría
+    castigada como fracaso).
 
     El P&L se acumula de forma ADITIVA sobre el capital inicial (sizing estático
     relativo al balance inicial), que es lo que define un challenge: objetivo y
@@ -126,7 +144,11 @@ def _first_passage(
         day_passed = np.where(newly, t + 1, day_passed)
         passed |= pass_now
 
-    return passed, day_passed
+    # Contabilidad de tres resultados: quien no pasó ni quemó queda UNRESOLVED.
+    outcome = np.full(n_paths, UNRESOLVED, dtype=np.int8)
+    outcome[passed] = PASSED
+    outcome[burned] = FAILED
+    return outcome, day_passed
 
 
 # --------------------------------------------------------------------------- #
@@ -161,10 +183,13 @@ def simulate_challenge(
         block_size=params.block_size,
         rng=rng,
     )
-    passed1, days1 = _first_passage(
+    outcome1, days1 = _first_passage(
         paths1, rules.phase1_target, rules.daily_loss_limit, rules.max_drawdown
     )
+    passed1 = outcome1 == PASSED
     p_phase1 = float(passed1.mean())
+    p_fail1 = float((outcome1 == FAILED).mean())
+    p_unresolved1 = float((outcome1 == UNRESOLVED).mean())
 
     # --- Fase 2 (independiente; P(ambas) = P1 * P2 condicional aprox.) ---
     paths2 = block_bootstrap(
@@ -174,13 +199,15 @@ def simulate_challenge(
         block_size=params.block_size,
         rng=rng,
     )
-    passed2, days2 = _first_passage(
+    outcome2, days2 = _first_passage(
         paths2, rules.phase2_target, rules.daily_loss_limit, rules.max_drawdown
     )
+    passed2 = outcome2 == PASSED
     p_phase2 = float(passed2.mean())
     p_both = p_phase1 * p_phase2
 
-    # Días esperados hasta pasar ambas fases (condicionado a pasar).
+    # Días esperados hasta pasar ambas fases (condicionado a pasar). Si en alguna
+    # fase nada pasa dentro del horizonte, se acota al horizonte total.
     if passed1.any() and passed2.any():
         expected_days = float(days1[passed1].mean() + days2[passed2].mean())
     else:
@@ -192,8 +219,10 @@ def simulate_challenge(
     p_survive_cycle = p_phase2
     p_burn_before_payout = float(1.0 - p_survive_cycle**rules.n_payouts)
 
-    # --- Valor esperado neto de cuotas ---
-    expected_net = _expected_net_value(p_both, p_burn_before_payout, rules)
+    # --- Valor esperado neto de cuotas (pone precio al tiempo) ---
+    expected_net = _expected_net_value(
+        p_both, p_burn_before_payout, expected_days, rules
+    )
 
     result = ChallengeResult(
         p_phase1=p_phase1,
@@ -202,50 +231,64 @@ def simulate_challenge(
         expected_days_to_pass=expected_days,
         p_burn_before_payout=p_burn_before_payout,
         expected_net_value=expected_net,
+        p_fail=p_fail1,
+        p_unresolved=p_unresolved1,
+        horizon_days=int(params.horizon_days),
     )
 
-    # --- Curva de apalancamiento óptimo ---
+    # --- Curva de apalancamiento ---
+    # Se reporta la curva P(pasar) como DIAGNÓSTICO (monótona decreciente en
+    # leverage con horizonte honesto), pero el apalancamiento de DECISIÓN sale
+    # de maximizar el valor esperado neto, que pone precio al tiempo/capital
+    # inmovilizado del bajo apalancamiento. argmax(P) daría el leverage mínimo.
     if with_leverage_curve:
         grid = np.arange(
             params.leverage_min,
             params.leverage_max + params.leverage_step / 2,
             params.leverage_step,
         )
-        curve = np.array(
-            [
-                simulate_challenge(
-                    r,
-                    rules=rules,
-                    params=params,
-                    leverage=float(k),
-                    with_leverage_curve=False,
-                ).p_both
-                for k in grid
-            ]
-        )
+        sub = [
+            simulate_challenge(
+                r, rules=rules, params=params, leverage=float(k),
+                with_leverage_curve=False,
+            )
+            for k in grid
+        ]
         result.leverage_grid = grid
-        result.leverage_pass_curve = curve
-        result.optimal_leverage = float(grid[int(np.argmax(curve))])
+        result.leverage_pass_curve = np.array([s.p_both for s in sub])
+        result.leverage_value_curve = np.array([s.expected_net_value for s in sub])
+        result.optimal_leverage = float(grid[int(np.argmax(result.leverage_value_curve))])
 
     return result
 
 
 def _expected_net_value(
-    p_both: float, p_burn_before_payout: float, rules: config.FirmRules
+    p_both: float,
+    p_burn_before_payout: float,
+    expected_days: float,
+    rules: config.FirmRules,
 ) -> float:
-    """Valor esperado neto de cuotas.
+    """Valor esperado neto de cuotas — pone precio al tiempo.
 
-    Nº esperado de intentos hasta pasar ambas fases ~ geométrica: 1/P(ambas).
-    Costo esperado de cuotas = intentos * fee. Ingreso esperado tras fondeo =
-    payout esperado ponderado por sobrevivir hasta el payout.
+    - Nº esperado de intentos hasta pasar ambas fases ~ geométrica: 1/P(ambas).
+    - Costo de cuotas = intentos · fee.
+    - Costo del tiempo = días esperados (por intento) · intentos · costo diario
+      de capital inmovilizado. Este término es lo que hace que el óptimo de
+      apalancamiento sea INTERIOR: sin él, bajar el leverage sólo subiría P y el
+      óptimo caería en el mínimo (esperar casi infinito).
+    - Ingreso tras fondeo = payout esperado ponderado por sobrevivir al payout.
+
+    Supuesto económico explícito: `rules.daily_capital_cost` es el costo de
+    oportunidad diario del capital mientras se intenta el challenge.
     """
     if p_both <= 0:
-        # Nunca pasa: sólo se acumulan cuotas (valor muy negativo acotado).
-        return -rules.fee / max(1e-9, 1e-3)
+        # Nunca pasa dentro del horizonte: sólo se acumulan cuotas y tiempo.
+        return -1e12
     expected_attempts = 1.0 / p_both
     expected_fee_cost = expected_attempts * rules.fee
+    expected_time_cost = expected_attempts * expected_days * rules.daily_capital_cost
     expected_income = (1.0 - p_burn_before_payout) * rules.payout_per_cycle * rules.n_payouts
-    return float(expected_income - expected_fee_cost)
+    return float(expected_income - expected_fee_cost - expected_time_cost)
 
 
 # --------------------------------------------------------------------------- #

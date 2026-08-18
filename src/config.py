@@ -91,6 +91,12 @@ class FirmRules:
     Todas las magnitudes de barrera se expresan como FRACCIÓN del capital
     inicial (p. ej. 0.10 = 10%). El drawdown es ESTÁTICO (contra capital
     inicial, no trailing — documento maestro sección 2.2).
+
+    NOTA sobre P&L aditivo: el simulador acumula P&L de forma ADITIVA sobre el
+    capital inicial (sizing estático), fiel al contrato real del challenge
+    (objetivo y drawdown en unidades monetarias contra el balance inicial, no en
+    espacio-log). El espacio-log SÓLO volvería a importar con sizing compuesto
+    sobre una cuenta fondeada con regla trailing; no se corrige ahora.
     """
 
     phase1_target: float = 0.10        # objetivo fase 1 (+10%)
@@ -100,6 +106,11 @@ class FirmRules:
     n_payouts: int = 4                 # nº de payouts N para "quemar cuenta"
     fee: float = 500.0                 # costo de la cuota del challenge (USD)
     payout_per_cycle: float = 1000.0   # payout esperado por ciclo tras fondeo (USD)
+    # Costo de oportunidad diario del capital inmovilizado (USD/día). Es el
+    # término que hace INTERIOR el óptimo de apalancamiento: su ubicación
+    # depende de este valor (más costo → óptimo a mayor leverage). Placeholder;
+    # calibrar con el capital real y su tasa de oportunidad.
+    daily_capital_cost: float = 10.0
 
 
 DEFAULT_FIRM_RULES = FirmRules()
@@ -112,7 +123,9 @@ class SimulatorParams:
 
     block_size: int = 20               # tamaño de bloque (>1; ~1 mes de trading)
     n_bootstraps: int = 10_000         # nº de trayectorias simuladas
-    horizon_days: int = 252            # horizonte máximo por fase (días)
+    horizon_days: int = 756            # horizonte máximo por fase (~3 años; FTMO
+                                       # eliminó el límite de tiempo, así que el
+                                       # horizonte es de modelado, no regla de firma)
     seed: int = 12345                  # semilla para reproducibilidad
     # Malla de apalancamiento: multiplicadores k evaluados para la curva P(pasar).
     leverage_min: float = 0.25

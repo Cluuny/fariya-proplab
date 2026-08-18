@@ -157,14 +157,42 @@ def test_expected_net_value_monotonic_in_edge():
     assert net_high > net_low
 
 
-# --- Sección 5: curva de apalancamiento -------------------------------------
+# --- Sección 5: curva de apalancamiento (decisión económica) ----------------
 def test_optimal_leverage_is_interior():
+    # El óptimo de DECISIÓN sale del valor esperado neto (no de argmax P). Con
+    # un costo de capital realista, es interior: ni el mínimo ni el máximo.
     r = _gaussian_returns(0.0008, 0.015, n=4000, seed=11)
-    p = config.SimulatorParams(n_bootstraps=2500, horizon_days=252, seed=1, block_size=20,
+    p = config.SimulatorParams(n_bootstraps=2500, seed=1, block_size=20,
                                leverage_min=0.25, leverage_max=3.0, leverage_step=0.25)
     res = challenge.simulate_challenge(r, params=p, with_leverage_curve=True)
     assert res.leverage_grid.size > 1
-    assert res.optimal_leverage < p.leverage_max  # el óptimo NO es el máximo
+    assert res.leverage_value_curve.size == res.leverage_grid.size
+    assert p.leverage_min < res.optimal_leverage < p.leverage_max  # interior
+
+
+def test_pass_prob_monotonic_in_leverage():
+    # Tesis del documento (§2.1): menos volatilidad → más P(pasar). Con horizonte
+    # honesto, P(pasar) debe crecer al bajar el apalancamiento (no colapsar a 0,
+    # que era el bug de truncación).
+    r = _gaussian_returns(0.0008, 0.015, n=4000, seed=11)
+    p = config.SimulatorParams(n_bootstraps=2500, seed=1, block_size=20)
+    res = challenge.simulate_challenge(r, params=p)
+    curve = res.leverage_pass_curve
+    assert curve[0] > curve[-1]        # tendencia decreciente en leverage
+    assert curve[0] > 0.5              # no colapsa a ~0 en el extremo bajo (era el bug)
+
+
+def test_three_outcome_accounting_no_folding():
+    # Regresión: "sin absorber" NO se pliega en "falló". Con baja deriva y
+    # horizonte corto, muchas trayectorias no absorben; deben contarse aparte.
+    r = _gaussian_returns(0.00005, 0.01, n=4000, seed=21)
+    p = config.SimulatorParams(n_bootstraps=3000, horizon_days=60, seed=1, block_size=20)
+    res = challenge.simulate_challenge(r, params=p, leverage=0.25,
+                                       with_leverage_curve=False)
+    total = res.p_phase1 + res.p_fail + res.p_unresolved
+    assert abs(total - 1.0) < 1e-9          # los tres resultados suman 1
+    assert res.p_unresolved > 0.1           # sin-absorber es visible, no plegado
+    assert res.horizon_days == 60           # el horizonte queda explícito
 
 
 # --- Determinismo ------------------------------------------------------------
