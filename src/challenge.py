@@ -9,12 +9,20 @@ produced by engine.py. It preserves autocorrelation and volatility clustering;
 an i.i.d. resample would underestimate the realistic volatility and give an
 optimistic, false P(pass) (master document section 2.1).
 
-Outputs (section 3.4):
-- P(pass phase 1), P(pass phase 2), P(pass both)
-- Expected days to pass
+Outputs (honest primitives; NO single "optimal leverage" yet):
+- P(pass phase 1/2), and P(pass | absorbed) = pass/(pass+fail) — the decision
+  probability, conditional on absorption
+- Three-outcome accounting: P(pass), P(fail), P(unresolved)
+- Expected days to pass (nan when the horizon is insufficient)
 - P(burn the funded account before payout N)
-- Expected net value after fees  ← the deciding metric
-- P(pass) vs leverage curve → optimal multiplier
+- Two diagnostic leverage curves: P(pass|absorbed) and P(burn)
+
+There is deliberately NO economic-value number and NO optimal-leverage pick here.
+Over P(pass) alone the optimum is a degenerate minimum (§2.1), and an expected-
+value objective rewards max leverage with house money. The DECISION objective is
+a THRESHOLD problem aligned with §1.2 — maximize P(monthly income ≥ $2500
+sustained over 24 months) — built in weeks 9-10 with the funded-phase model, so
+`optimal_leverage` stays None until then.
 
 Verification: against the closed-form analytic first-passage formula with a
 double barrier (see `analytic_pass_probability`), not against intuition.
@@ -45,11 +53,15 @@ class ChallengeResult:
     p_phase1: float
     p_phase2: float
     p_both: float
+    # Expected days to pass (incl. failed attempts); nan when the horizon is
+    # insufficient (a value there would be biased toward the fast-absorbing few).
     expected_days_to_pass: float
     p_burn_before_payout: float
-    # Economic value per YEAR (fraction/USD), or nan when the horizon is
-    # insufficient (see `insufficient_horizon`). This is the deciding metric.
-    expected_net_value: float
+    # RETIRED: the provisional per-year economic value was misspecified (its
+    # optimum sat on the grid edge, assuming unlimited re-entry at the fee) and
+    # carried a hidden knob. Kept as a field, always nan, until the threshold
+    # objective (weeks 9-10). An absent value beats a wrong one.
+    expected_net_value: float = float("nan")
     # Decision probability, CONDITIONAL ON ABSORPTION: p_cond = pass/(pass+fail).
     # This is the correct first-passage probability; UNRESOLVED is not a failure.
     p_pass_conditional: float = 0.0
@@ -61,15 +73,16 @@ class ChallengeResult:
     insufficient_horizon: bool = False
     horizon_days: int = 0
     leverage_grid: np.ndarray = field(default_factory=lambda: np.array([]))
-    # Two diagnostic curves, always reported. NEITHER is collapsed into a single
+    # Diagnostic curves, always reported. NO economic-value curve — it was
+    # retired (misspecified + hidden knob). These are NOT collapsed into a single
     # optimum yet — see `optimal_leverage`.
     leverage_pass_curve: np.ndarray = field(default_factory=lambda: np.array([]))
-    leverage_value_curve: np.ndarray = field(default_factory=lambda: np.array([]))
-    # DECISION (week 6): optimal_leverage is UNDEFINED (None) until the funded
-    # phase is modeled (weeks 9-10) and the objective — expected value per unit
-    # time with an ENDOGENOUS payout — is built. Picking an optimum now would be
-    # determined by a modeling knob (horizon_days / leverage_min / a cost term),
-    # not by the data. An honest None beats a number that points the wrong way.
+    leverage_burn_curve: np.ndarray = field(default_factory=lambda: np.array([]))
+    # DECISION (week 6): optimal_leverage is UNDEFINED (None) until the THRESHOLD
+    # objective (§1.2: P(monthly income ≥ $2500 sustained 24m)) is built in weeks
+    # 9-10 with the funded-phase model. Picking an optimum now would be determined
+    # by a modeling knob (horizon_days / leverage_min), not the data. An honest
+    # None beats a number that points the wrong way.
     optimal_leverage: float | None = None
     optimal_leverage_reason: str = ""
 
@@ -233,23 +246,19 @@ def simulate_challenge(
         or s2.p_unresolved > params.unresolved_threshold
     )
 
-    # --- Funded phase (derives payout & burn; both scale with leverage) ---
-    p_survive_cycle, payout_frac = _funded_phase(scaled, rules, params, rng)
+    # --- Funded phase (survival → P(burn); rises with leverage) ---
+    p_survive_cycle = _funded_phase(scaled, rules, params, rng)
     p_burn_before_payout = float(1.0 - p_survive_cycle**rules.n_payouts)
 
     # --- Expected days to pass, INCLUDING failed attempts (both absorb) ---
-    if p_cond > 0:
+    # nan when the horizon is insufficient: an estimate conditioned on the small
+    # fast-absorbing subset would be biased.
+    if p_cond > 0 and not insufficient:
         expected_attempts = 1.0 / p_cond
         per_attempt_days = s1.mean_absorb_day + s1.p_cond * s2.mean_absorb_day
         expected_days = float(expected_attempts * per_attempt_days)
     else:
-        expected_attempts = float("inf")
         expected_days = float("nan")
-
-    # --- Economic value per year (nan when horizon insufficient) ---
-    expected_net = _economic_value(
-        p_cond, p_survive_cycle, payout_frac, expected_days, insufficient, rules
-    )
 
     result = ChallengeResult(
         p_phase1=s1.p_pass,
@@ -257,7 +266,6 @@ def simulate_challenge(
         p_both=p_both,
         expected_days_to_pass=expected_days,
         p_burn_before_payout=p_burn_before_payout,
-        expected_net_value=expected_net,
         p_pass_conditional=p_cond,
         p_fail=s1.p_fail,
         p_unresolved=s1.p_unresolved,
@@ -265,13 +273,12 @@ def simulate_challenge(
         horizon_days=int(params.horizon_days),
     )
 
-    # --- Leverage curves (both reported; NO single optimum yet) ---
-    # Two diagnostics: the conditional-P(pass) curve (favors low leverage — the
-    # §2.1 thesis) and the provisional value-per-year curve (endogenous payout).
-    # We do NOT pick optimal_leverage from either: over P alone the optimum is a
-    # degenerate minimum, and the value objective is not final until the funded
-    # phase is modeled (weeks 9-10). Collapsing to a number now would be driven
-    # by a modeling knob, not the data. See the DECISION note on ChallengeResult.
+    # --- Leverage curve (diagnostic; NO single optimum yet) ---
+    # Only the honest primitive is reported: the conditional-P(pass) curve (favors
+    # low leverage — the §2.1 thesis). There is deliberately NO economic-value
+    # curve: over P alone the optimum is a degenerate minimum, and an expected-
+    # value objective rewards max leverage with house money. The decision objective
+    # is the THRESHOLD problem built in weeks 9-10, so optimal_leverage stays None.
     if with_leverage_curve:
         grid = np.arange(
             params.leverage_min,
@@ -287,7 +294,7 @@ def simulate_challenge(
         ]
         result.leverage_grid = grid
         result.leverage_pass_curve = np.array([s.p_pass_conditional for s in sub])
-        result.leverage_value_curve = np.array([s.expected_net_value for s in sub])
+        result.leverage_burn_curve = np.array([s.p_burn_before_payout for s in sub])
         result.optimal_leverage = None
         result.optimal_leverage_reason = (
             "objetivo no definido; ver spec challenge-simulator §leverage "
@@ -326,16 +333,20 @@ def _funded_phase(
     rules: config.FirmRules,
     params: config.SimulatorParams,
     rng: np.random.Generator,
-) -> tuple[float, float]:
-    """Simulate one funded-phase payout cycle to DERIVE payout and survival.
+) -> float:
+    """Simulate one funded-phase payout cycle and return the survival probability.
 
-    Over a payout window, the funded account has only the loss barriers (daily
-    limit and static drawdown), no target. Returns:
-    - `p_survive`: fraction of windows that survive without hitting a loss barrier.
-      Falls as leverage rises → P(burn) rises with leverage (correct).
-    - `payout_frac`: profit_split × E[end P&L fraction | survived, clipped ≥ 0].
-      Rises with leverage/volatility → the payout SCALES with the return, so the
-      interior optimum emerges from a real trade-off, not an invented cost knob.
+    Over a payout window the funded account has only the loss barriers (daily
+    limit and static drawdown), no target. Returns `p_survive`: the fraction of
+    windows that survive without hitting a loss barrier. It falls as leverage
+    rises → P(burn) rises with leverage (correct).
+
+    MODEL ASSUMPTION (known limitation): the balance is NOT reset between windows
+    — each window accumulates from zero P&L. Real brokers reset the balance to the
+    initial balance after each payout, so successive cycles are independent draws.
+    Not corrected here; the real funded-phase model (and the threshold objective)
+    is built in weeks 9-10. The provisional per-year value that used the end-of-
+    window profit was retired, so only survival (for P(burn)) is returned now.
     """
     paths = block_bootstrap(
         scaled,
@@ -348,58 +359,7 @@ def _funded_phase(
     daily_hit = (paths <= -rules.daily_loss_limit).any(axis=1)
     dd_hit = (level <= -rules.max_drawdown).any(axis=1)
     survived = ~(daily_hit | dd_hit)
-    p_survive = float(survived.mean())
-    if survived.any():
-        profit = max(0.0, float(level[survived, -1].mean()))
-    else:
-        profit = 0.0
-    payout_frac = rules.profit_split * profit
-    return p_survive, payout_frac
-
-
-def _economic_value(
-    p_cond: float,
-    p_survive_cycle: float,
-    payout_frac: float,
-    expected_days: float,
-    insufficient_horizon: bool,
-    rules: config.FirmRules,
-) -> float:
-    """Economic value per YEAR, conditional on absorption.
-
-    Returns nan (never a magic sentinel) when the value is undefined: the horizon
-    is insufficient, nobody passes, or there is no elapsed time. nan is excluded
-    from the leverage argmax rather than dominating it.
-
-    - Expected attempts to pass both phases = 1 / p_cond (conditional pass).
-    - Fee cost = attempts · fee.
-    - Funded income = payout (derived, scales with return) × expected number of
-      collected payouts before burning.
-    - Total time = challenge time (incl. failed attempts) + funded time.
-    """
-    if insufficient_horizon or p_cond <= 0 or not np.isfinite(expected_days):
-        return float("nan")
-
-    expected_attempts = 1.0 / p_cond
-    fee_cost = expected_attempts * rules.fee
-
-    # Renewal model: after funding you collect a payout each surviving cycle and
-    # keep going until you BURN, then you must re-qualify (pay the challenge fee
-    # again). Expected payouts collected before the first burn is geometric and
-    # UNCAPPED: s/(1-s). Surviving (low leverage) is rewarded with many cycles;
-    # burning fast (high leverage) cuts them off. This is what makes the optimum
-    # interior — the real trade-off, not an invented cost.
-    s = min(p_survive_cycle, 0.9995)  # cap to keep the limit finite
-    expected_payouts = s / (1.0 - s)
-    payout_usd = payout_frac * rules.account_capital
-    income = payout_usd * expected_payouts
-
-    funded_days = expected_payouts * rules.payout_interval_days
-    total_days = expected_days + funded_days
-    if total_days <= 0:
-        return float("nan")
-    years = total_days / config.TRADING_DAYS_PER_YEAR
-    return float((income - fee_cost) / years)
+    return float(survived.mean())
 
 
 # --------------------------------------------------------------------------- #
