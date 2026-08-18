@@ -103,14 +103,14 @@ class FirmRules:
     phase2_target: float = 0.05        # phase 2 target (+5%)
     daily_loss_limit: float = 0.05     # daily loss limit (5%)
     max_drawdown: float = 0.10         # static max drawdown (10%)
-    n_payouts: int = 4                 # number of payouts N to "burn the account"
+    n_payouts: int = 4                 # number of payout cycles N considered
     fee: float = 500.0                 # challenge fee cost (USD)
-    payout_per_cycle: float = 1000.0   # expected payout per cycle after funding (USD)
-    # Daily opportunity cost of the tied-up capital (USD/day). This is the term
-    # that makes the leverage optimum INTERIOR: its location depends on this
-    # value (more cost → optimum at higher leverage). Placeholder; calibrate
-    # with the real capital and its opportunity rate.
-    daily_capital_cost: float = 10.0
+    # Funded-phase parameters. The payout per cycle is DERIVED by simulating the
+    # funded phase (it scales with the strategy return), NOT fixed by hand. These
+    # are real firm rules, not invented cost knobs.
+    profit_split: float = 0.80         # trader's share of funded-phase profit
+    payout_interval_days: int = 21     # length of a payout cycle (~1 month)
+    account_capital: float = 100_000.0 # funded account size (USD), for unit consistency
 
 
 DEFAULT_FIRM_RULES = FirmRules()
@@ -127,6 +127,9 @@ class SimulatorParams:
                                        # removed the time limit, so the horizon
                                        # is a modeling choice, not a firm rule)
     seed: int = 12345                  # seed for reproducibility
+    # If the UNRESOLVED fraction of any phase exceeds this threshold, the economic
+    # value is not reported (insufficient horizon) instead of a misleading number.
+    unresolved_threshold: float = 0.05
     # Leverage grid: multipliers k evaluated for the P(pass) curve.
     leverage_min: float = 0.25
     leverage_max: float = 3.0

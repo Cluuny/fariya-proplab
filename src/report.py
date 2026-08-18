@@ -61,33 +61,39 @@ def render_challenge(result) -> str:
         "",
         "| Métrica | Valor |",
         "|---|---|",
+        f"| P(pasar | absorbió) — decisión | {result.p_pass_conditional:.4f} |",
         f"| P(pasar fase 1) | {result.p_phase1:.4f} |",
         f"| P(fallar fase 1) | {result.p_fail:.4f} |",
         f"| P(sin absorber fase 1) | {result.p_unresolved:.4f} |",
         f"| P(pasar fase 2) | {result.p_phase2:.4f} |",
-        f"| P(pasar ambas) | {result.p_both:.4f} |",
         f"| Días esperados hasta pasar | {result.expected_days_to_pass:.1f} |",
         f"| P(quemar antes del payout N) | {result.p_burn_before_payout:.4f} |",
-        f"| Valor esperado neto de cuotas | {result.expected_net_value:.2f} |",
-        f"| Apalancamiento óptimo (decisión) | {result.optimal_leverage:.2f}× |",
+        f"| Valor por año (USD, provisional) | {result.expected_net_value:.2f} |",
+        (
+            f"| Apalancamiento óptimo (decisión) | {result.optimal_leverage:.2f}× |"
+            if result.optimal_leverage is not None
+            else f"| Apalancamiento óptimo (decisión) | no definido — {result.optimal_leverage_reason} |"
+        ),
         f"| Horizonte (días) | {result.horizon_days} |",
+        f"| Horizonte insuficiente | {'sí' if result.insufficient_horizon else 'no'} |",
         "",
     ]
     if result.leverage_grid.size:
         lines += [
             "### Curva de apalancamiento",
             "",
-            "P(pasar) es diagnóstica (monótona con horizonte honesto); el óptimo de "
-            "**decisión** se elige por valor esperado neto, que pone precio al tiempo.",
+            "Ambas curvas son diagnósticas. `P(pasar | absorbió)` es monótona "
+            "(favorece bajo leverage, tesis §2.1); el valor por año es provisional "
+            "(payout endógeno; el objetivo de decisión se define en sem 9-10). No se "
+            "colapsa a un único óptimo: hacerlo hoy lo fijaría una perilla, no los datos.",
             "",
-            "| Leverage | P(ambas) | Valor neto |",
+            "| Leverage | P(pasar\\|absorbió) | Valor/año (prov.) |",
             "|---|---|---|",
         ]
         val = result.leverage_value_curve
         for i, (k, p) in enumerate(zip(result.leverage_grid, result.leverage_pass_curve)):
-            v = f"{val[i]:.0f}" if i < len(val) else "—"
-            mark = "  ← óptimo" if abs(k - result.optimal_leverage) < 1e-9 else ""
-            lines.append(f"| {k:.2f}× | {p:.4f} | {v}{mark} |")
+            v = f"{val[i]:.0f}" if i < len(val) and not (val[i] != val[i]) else "—"
+            lines.append(f"| {k:.2f}× | {p:.4f} | {v} |")
         lines.append("")
     return "\n".join(lines)
 

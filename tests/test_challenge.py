@@ -25,7 +25,6 @@ def _verif_rules(barrier):
         max_drawdown=barrier,
         n_payouts=1,
         fee=0.0,
-        payout_per_cycle=0.0,
     )
 
 
@@ -152,26 +151,69 @@ def test_changing_rules_changes_result():
 
 # --- Section 4: economic metrics --------------------------------------------
 def test_expected_net_value_monotonic_in_edge():
-    p = config.SimulatorParams(n_bootstraps=3000, horizon_days=252, seed=1, block_size=20)
-    r_low = _gaussian_returns(0.0003, 0.01, n=4000, seed=10)
-    r_high = _gaussian_returns(0.0009, 0.01, n=4000, seed=10)  # more drift, same vol
+    # More edge (same vol) → higher value per year, both defined (long horizon).
+    p = config.SimulatorParams(n_bootstraps=3000, horizon_days=1500, seed=1, block_size=20)
+    r_low = _gaussian_returns(0.0006, 0.01, n=4000, seed=10)
+    r_high = _gaussian_returns(0.0012, 0.01, n=4000, seed=10)  # more drift, same vol
     net_low = challenge.simulate_challenge(r_low, params=p, with_leverage_curve=False).expected_net_value
     net_high = challenge.simulate_challenge(r_high, params=p, with_leverage_curve=False).expected_net_value
+    assert np.isfinite(net_low) and np.isfinite(net_high)
     assert net_high > net_low
 
 
-# --- Section 5: leverage curve (economic decision) --------------------------
-def test_optimal_leverage_is_interior():
-    # The DECISION optimum comes from the expected net value (not from argmax P).
-    # With a realistic capital cost, it is interior: neither the minimum nor the
-    # maximum.
+# --- Section 5: leverage curves (both reported; no single optimum yet) ------
+def test_optimal_leverage_is_none_pending_objective():
+    # DECISION (week 6): optimal_leverage is undefined (None) until the funded
+    # phase is modeled. Both diagnostic curves are still reported. Collapsing to
+    # a number now would be driven by a modeling knob, not the data.
     r = _gaussian_returns(0.0008, 0.015, n=4000, seed=11)
-    p = config.SimulatorParams(n_bootstraps=2500, seed=1, block_size=20,
-                               leverage_min=0.25, leverage_max=3.0, leverage_step=0.25)
+    p = config.SimulatorParams(n_bootstraps=2000, seed=1, block_size=20)
     res = challenge.simulate_challenge(r, params=p, with_leverage_curve=True)
-    assert res.leverage_grid.size > 1
+    assert res.optimal_leverage is None
+    assert res.optimal_leverage_reason  # non-empty explanation
+    assert res.leverage_pass_curve.size == res.leverage_grid.size
     assert res.leverage_value_curve.size == res.leverage_grid.size
-    assert p.leverage_min < res.optimal_leverage < p.leverage_max  # interior
+
+
+def test_p_burn_rises_with_leverage():
+    # Bug 2 fixed: surviving = not hitting the loss barrier. More leverage → more
+    # burn (the drawdown is an absorbing barrier).
+    r = _gaussian_returns(0.0006, 0.01, n=4000, seed=14)
+    p = config.SimulatorParams(n_bootstraps=3000, seed=1, block_size=20)
+    low = challenge.simulate_challenge(r, params=p, leverage=0.5, with_leverage_curve=False)
+    high = challenge.simulate_challenge(r, params=p, leverage=3.0, with_leverage_curve=False)
+    assert high.p_burn_before_payout > low.p_burn_before_payout
+
+
+def test_insufficient_horizon_guard():
+    # Slow strategy at low leverage with a short horizon: most paths do not
+    # absorb → guard flags it and does NOT report an economic value.
+    r = _gaussian_returns(0.00005, 0.01, n=4000, seed=15)
+    p = config.SimulatorParams(n_bootstraps=3000, horizon_days=120, seed=1, block_size=20)
+    res = challenge.simulate_challenge(r, params=p, leverage=0.25, with_leverage_curve=False)
+    assert res.insufficient_horizon
+    assert np.isnan(res.expected_net_value)
+
+
+def test_conditional_pass_invariant_to_horizon():
+    # The decision probability (conditional on absorption) is ~invariant to the
+    # horizon, while raw p_both is NOT. This is the property that proves no metric
+    # folds UNRESOLVED into failure.
+    # Low leverage so the SHORT horizon genuinely truncates (many unresolved).
+    r = _gaussian_returns(0.0006, 0.01, n=6000, seed=16)
+    short = challenge.simulate_challenge(
+        r, leverage=0.4,
+        params=config.SimulatorParams(n_bootstraps=4000, horizon_days=250, seed=1,
+                                      block_size=20), with_leverage_curve=False)
+    long = challenge.simulate_challenge(
+        r, leverage=0.4,
+        params=config.SimulatorParams(n_bootstraps=4000, horizon_days=2500, seed=1,
+                                      block_size=20), with_leverage_curve=False)
+    # Conditional pass is stable across horizons...
+    assert abs(short.p_pass_conditional - long.p_pass_conditional) < 0.05
+    # ...while raw p_both changes materially (short horizon leaves more unresolved).
+    assert short.p_unresolved > 0.2
+    assert long.p_both - short.p_both > 0.05
 
 
 def test_pass_prob_monotonic_in_leverage():
@@ -208,8 +250,9 @@ def test_report_integration():
     res = challenge.simulate_challenge(r, params=p)
     md = report.render(r, name="bh", challenge_result=res)
     assert "Challenge (simulador de barrera)" in md
-    assert "P(pasar ambas)" in md
+    assert "P(pasar | absorbió) — decisión" in md
     assert "Apalancamiento óptimo" in md
+    assert "Horizonte insuficiente" in md
 
 
 def test_deterministic_under_seed():
@@ -218,4 +261,8 @@ def test_deterministic_under_seed():
     a = challenge.simulate_challenge(r, params=p, with_leverage_curve=False)
     b = challenge.simulate_challenge(r, params=p, with_leverage_curve=False)
     assert a.p_both == b.p_both
-    assert a.expected_net_value == b.expected_net_value
+    assert a.p_pass_conditional == b.p_pass_conditional
+    # Determinista incluso cuando el valor es nan (horizonte insuficiente).
+    assert (a.expected_net_value == b.expected_net_value) or (
+        np.isnan(a.expected_net_value) and np.isnan(b.expected_net_value)
+    )

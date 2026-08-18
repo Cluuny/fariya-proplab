@@ -47,15 +47,31 @@ class ChallengeResult:
     p_both: float
     expected_days_to_pass: float
     p_burn_before_payout: float
+    # Economic value per YEAR (fraction/USD), or nan when the horizon is
+    # insufficient (see `insufficient_horizon`). This is the deciding metric.
     expected_net_value: float
+    # Decision probability, CONDITIONAL ON ABSORPTION: p_cond = pass/(pass+fail).
+    # This is the correct first-passage probability; UNRESOLVED is not a failure.
+    p_pass_conditional: float = 0.0
     # Three-outcome accounting for phase 1 (sum to 1 with p_phase1).
     p_fail: float = 0.0
     p_unresolved: float = 0.0
+    # True when the UNRESOLVED fraction exceeds the threshold in any phase; the
+    # economic value is then nan (a number there would be misleading).
+    insufficient_horizon: bool = False
     horizon_days: int = 0
     leverage_grid: np.ndarray = field(default_factory=lambda: np.array([]))
+    # Two diagnostic curves, always reported. NEITHER is collapsed into a single
+    # optimum yet — see `optimal_leverage`.
     leverage_pass_curve: np.ndarray = field(default_factory=lambda: np.array([]))
     leverage_value_curve: np.ndarray = field(default_factory=lambda: np.array([]))
-    optimal_leverage: float = 1.0
+    # DECISION (week 6): optimal_leverage is UNDEFINED (None) until the funded
+    # phase is modeled (weeks 9-10) and the objective — expected value per unit
+    # time with an ENDOGENOUS payout — is built. Picking an optimum now would be
+    # determined by a modeling knob (horizon_days / leverage_min / a cost term),
+    # not by the data. An honest None beats a number that points the wrong way.
+    optimal_leverage: float | None = None
+    optimal_leverage_reason: str = ""
 
 
 # --------------------------------------------------------------------------- #
@@ -118,14 +134,16 @@ def _first_passage(
     - PASS: pnl >= target
     - BURN: daily return <= -daily_loss_limit  (daily loss limit)
             or pnl <= -max_drawdown            (static drawdown vs initial)
-    The first event wins (first passage). `day_index` = day of the passing event
-    (or the horizon if it does not pass).
+    The first event wins (first passage). `day_absorbed` = the day the barrier was
+    touched, recorded for BOTH passing AND burning trajectories (or the horizon if
+    the path never absorbs). Recording the burn day too is required so the economic
+    layer can price the time consumed by FAILED attempts, not only the winners.
     """
     n_paths, horizon = paths.shape
     level = np.zeros(n_paths)          # accumulated (additive) P&L vs initial capital
     passed = np.zeros(n_paths, dtype=bool)
     burned = np.zeros(n_paths, dtype=bool)
-    day_passed = np.full(n_paths, horizon, dtype=int)
+    day_absorbed = np.full(n_paths, horizon, dtype=int)
 
     for t in range(horizon):
         active = ~passed & ~burned
@@ -137,19 +155,19 @@ def _first_passage(
 
         # Burn: violation of the daily limit or the static drawdown.
         burn_now = active & ((r_t <= -daily_loss_limit) | (pnl <= -max_drawdown))
-        burned |= burn_now
-
         # Pass: reaches the target without having burned on this same day.
         pass_now = active & ~burn_now & (pnl >= target)
-        newly = pass_now & ~passed
-        day_passed = np.where(newly, t + 1, day_passed)
+
+        # burn_now/pass_now are gated on `active`, so they are inherently "newly".
+        day_absorbed = np.where(burn_now | pass_now, t + 1, day_absorbed)
+        burned |= burn_now
         passed |= pass_now
 
     # Three-outcome accounting: whoever neither passed nor burned is UNRESOLVED.
     outcome = np.full(n_paths, UNRESOLVED, dtype=np.int8)
     outcome[passed] = PASSED
     outcome[burned] = FAILED
-    return outcome, day_passed
+    return outcome, day_absorbed
 
 
 # --------------------------------------------------------------------------- #
@@ -187,12 +205,9 @@ def simulate_challenge(
     outcome1, days1 = _first_passage(
         paths1, rules.phase1_target, rules.daily_loss_limit, rules.max_drawdown
     )
-    passed1 = outcome1 == PASSED
-    p_phase1 = float(passed1.mean())
-    p_fail1 = float((outcome1 == FAILED).mean())
-    p_unresolved1 = float((outcome1 == UNRESOLVED).mean())
+    s1 = _PhaseStats.of(outcome1, days1)
 
-    # --- Phase 2 (independent; P(both) = P1 * P2 conditional approx.) ---
+    # --- Phase 2 ---
     paths2 = block_bootstrap(
         scaled,
         n_paths=params.n_bootstraps,
@@ -203,45 +218,60 @@ def simulate_challenge(
     outcome2, days2 = _first_passage(
         paths2, rules.phase2_target, rules.daily_loss_limit, rules.max_drawdown
     )
-    passed2 = outcome2 == PASSED
-    p_phase2 = float(passed2.mean())
-    p_both = p_phase1 * p_phase2
+    s2 = _PhaseStats.of(outcome2, days2)
 
-    # Expected days to pass both phases (conditional on passing). If nothing
-    # passes within the horizon in some phase, it is capped at the total horizon.
-    if passed1.any() and passed2.any():
-        expected_days = float(days1[passed1].mean() + days2[passed2].mean())
-    else:
-        expected_days = float(params.horizon_days * 2)
+    p_both = s1.p_pass * s2.p_pass  # raw (diagnostic only; NOT used for decisions)
 
-    # --- P(burn the funded account before payout N) ---
-    # After funding, each payout cycle is like surviving without violating
-    # DD/daily. Reuse phase 2 as a proxy for a "payout cycle": burn = not survive.
-    p_survive_cycle = p_phase2
+    # --- Decision probability CONDITIONAL ON ABSORPTION ---
+    # An attempt does not end at the horizon; it ends when it hits a barrier.
+    # UNRESOLVED is a horizon-quality signal, not a failure.
+    p_cond = s1.p_cond * s2.p_cond
+
+    # --- Guard: insufficient horizon ---
+    insufficient = (
+        s1.p_unresolved > params.unresolved_threshold
+        or s2.p_unresolved > params.unresolved_threshold
+    )
+
+    # --- Funded phase (derives payout & burn; both scale with leverage) ---
+    p_survive_cycle, payout_frac = _funded_phase(scaled, rules, params, rng)
     p_burn_before_payout = float(1.0 - p_survive_cycle**rules.n_payouts)
 
-    # --- Expected net value after fees (puts a price on time) ---
-    expected_net = _expected_net_value(
-        p_both, p_burn_before_payout, expected_days, rules
+    # --- Expected days to pass, INCLUDING failed attempts (both absorb) ---
+    if p_cond > 0:
+        expected_attempts = 1.0 / p_cond
+        per_attempt_days = s1.mean_absorb_day + s1.p_cond * s2.mean_absorb_day
+        expected_days = float(expected_attempts * per_attempt_days)
+    else:
+        expected_attempts = float("inf")
+        expected_days = float("nan")
+
+    # --- Economic value per year (nan when horizon insufficient) ---
+    expected_net = _economic_value(
+        p_cond, p_survive_cycle, payout_frac, expected_days, insufficient, rules
     )
 
     result = ChallengeResult(
-        p_phase1=p_phase1,
-        p_phase2=p_phase2,
+        p_phase1=s1.p_pass,
+        p_phase2=s2.p_pass,
         p_both=p_both,
         expected_days_to_pass=expected_days,
         p_burn_before_payout=p_burn_before_payout,
         expected_net_value=expected_net,
-        p_fail=p_fail1,
-        p_unresolved=p_unresolved1,
+        p_pass_conditional=p_cond,
+        p_fail=s1.p_fail,
+        p_unresolved=s1.p_unresolved,
+        insufficient_horizon=insufficient,
         horizon_days=int(params.horizon_days),
     )
 
-    # --- Leverage curve ---
-    # The P(pass) curve is reported as a DIAGNOSTIC (monotonically decreasing in
-    # leverage with an honest horizon), but the DECISION leverage comes from
-    # maximizing the expected net value, which prices the time/tied-up capital
-    # of low leverage. argmax(P) would give the minimum leverage.
+    # --- Leverage curves (both reported; NO single optimum yet) ---
+    # Two diagnostics: the conditional-P(pass) curve (favors low leverage — the
+    # §2.1 thesis) and the provisional value-per-year curve (endogenous payout).
+    # We do NOT pick optimal_leverage from either: over P alone the optimum is a
+    # degenerate minimum, and the value objective is not final until the funded
+    # phase is modeled (weeks 9-10). Collapsing to a number now would be driven
+    # by a modeling knob, not the data. See the DECISION note on ChallengeResult.
     if with_leverage_curve:
         grid = np.arange(
             params.leverage_min,
@@ -256,41 +286,120 @@ def simulate_challenge(
             for k in grid
         ]
         result.leverage_grid = grid
-        result.leverage_pass_curve = np.array([s.p_both for s in sub])
+        result.leverage_pass_curve = np.array([s.p_pass_conditional for s in sub])
         result.leverage_value_curve = np.array([s.expected_net_value for s in sub])
-        result.optimal_leverage = float(grid[int(np.argmax(result.leverage_value_curve))])
+        result.optimal_leverage = None
+        result.optimal_leverage_reason = (
+            "objetivo no definido; ver spec challenge-simulator §leverage "
+            "(pendiente del modelo de fase fondeada, sem 9-10)"
+        )
 
     return result
 
 
-def _expected_net_value(
-    p_both: float,
-    p_burn_before_payout: float,
+@dataclass
+class _PhaseStats:
+    """Per-phase outcome statistics, conditional on absorption."""
+
+    p_pass: float
+    p_fail: float
+    p_unresolved: float
+    p_cond: float          # pass / (pass + fail) — conditional on absorption
+    mean_absorb_day: float  # mean day of absorption over PASSED and FAILED paths
+
+    @classmethod
+    def of(cls, outcome: np.ndarray, day_absorbed: np.ndarray) -> "_PhaseStats":
+        passed = outcome == PASSED
+        failed = outcome == FAILED
+        absorbed = passed | failed
+        p_pass = float(passed.mean())
+        p_fail = float(failed.mean())
+        p_unres = float((outcome == UNRESOLVED).mean())
+        denom = p_pass + p_fail
+        p_cond = float(p_pass / denom) if denom > 0 else 0.0
+        mean_day = float(day_absorbed[absorbed].mean()) if absorbed.any() else float("nan")
+        return cls(p_pass, p_fail, p_unres, p_cond, mean_day)
+
+
+def _funded_phase(
+    scaled: np.ndarray,
+    rules: config.FirmRules,
+    params: config.SimulatorParams,
+    rng: np.random.Generator,
+) -> tuple[float, float]:
+    """Simulate one funded-phase payout cycle to DERIVE payout and survival.
+
+    Over a payout window, the funded account has only the loss barriers (daily
+    limit and static drawdown), no target. Returns:
+    - `p_survive`: fraction of windows that survive without hitting a loss barrier.
+      Falls as leverage rises → P(burn) rises with leverage (correct).
+    - `payout_frac`: profit_split × E[end P&L fraction | survived, clipped ≥ 0].
+      Rises with leverage/volatility → the payout SCALES with the return, so the
+      interior optimum emerges from a real trade-off, not an invented cost knob.
+    """
+    paths = block_bootstrap(
+        scaled,
+        n_paths=params.n_bootstraps,
+        horizon=rules.payout_interval_days,
+        block_size=params.block_size,
+        rng=rng,
+    )
+    level = np.cumsum(paths, axis=1)
+    daily_hit = (paths <= -rules.daily_loss_limit).any(axis=1)
+    dd_hit = (level <= -rules.max_drawdown).any(axis=1)
+    survived = ~(daily_hit | dd_hit)
+    p_survive = float(survived.mean())
+    if survived.any():
+        profit = max(0.0, float(level[survived, -1].mean()))
+    else:
+        profit = 0.0
+    payout_frac = rules.profit_split * profit
+    return p_survive, payout_frac
+
+
+def _economic_value(
+    p_cond: float,
+    p_survive_cycle: float,
+    payout_frac: float,
     expected_days: float,
+    insufficient_horizon: bool,
     rules: config.FirmRules,
 ) -> float:
-    """Expected net value after fees — puts a price on time.
+    """Economic value per YEAR, conditional on absorption.
 
-    - Expected number of attempts until passing both phases ~ geometric:
-      1/P(both).
+    Returns nan (never a magic sentinel) when the value is undefined: the horizon
+    is insufficient, nobody passes, or there is no elapsed time. nan is excluded
+    from the leverage argmax rather than dominating it.
+
+    - Expected attempts to pass both phases = 1 / p_cond (conditional pass).
     - Fee cost = attempts · fee.
-    - Time cost = expected days (per attempt) · attempts · daily cost of tied-up
-      capital. This term is what makes the leverage optimum INTERIOR: without
-      it, lowering the leverage would only raise P and the optimum would fall at
-      the minimum (waiting almost forever).
-    - Income after funding = expected payout weighted by surviving the payout.
-
-    Explicit economic assumption: `rules.daily_capital_cost` is the daily
-    opportunity cost of the capital while attempting the challenge.
+    - Funded income = payout (derived, scales with return) × expected number of
+      collected payouts before burning.
+    - Total time = challenge time (incl. failed attempts) + funded time.
     """
-    if p_both <= 0:
-        # Never passes within the horizon: only fees and time accumulate.
-        return -1e12
-    expected_attempts = 1.0 / p_both
-    expected_fee_cost = expected_attempts * rules.fee
-    expected_time_cost = expected_attempts * expected_days * rules.daily_capital_cost
-    expected_income = (1.0 - p_burn_before_payout) * rules.payout_per_cycle * rules.n_payouts
-    return float(expected_income - expected_fee_cost - expected_time_cost)
+    if insufficient_horizon or p_cond <= 0 or not np.isfinite(expected_days):
+        return float("nan")
+
+    expected_attempts = 1.0 / p_cond
+    fee_cost = expected_attempts * rules.fee
+
+    # Renewal model: after funding you collect a payout each surviving cycle and
+    # keep going until you BURN, then you must re-qualify (pay the challenge fee
+    # again). Expected payouts collected before the first burn is geometric and
+    # UNCAPPED: s/(1-s). Surviving (low leverage) is rewarded with many cycles;
+    # burning fast (high leverage) cuts them off. This is what makes the optimum
+    # interior — the real trade-off, not an invented cost.
+    s = min(p_survive_cycle, 0.9995)  # cap to keep the limit finite
+    expected_payouts = s / (1.0 - s)
+    payout_usd = payout_frac * rules.account_capital
+    income = payout_usd * expected_payouts
+
+    funded_days = expected_payouts * rules.payout_interval_days
+    total_days = expected_days + funded_days
+    if total_days <= 0:
+        return float("nan")
+    years = total_days / config.TRADING_DAYS_PER_YEAR
+    return float((income - fee_cost) / years)
 
 
 # --------------------------------------------------------------------------- #
