@@ -31,10 +31,13 @@ def test_unmapped_symbol_is_a_visible_error():
 
 def test_universe_is_decorrelated():
     # Corrección del reviewer: energía (Brent) y Asia (Nikkei), no solo equity USA/EU.
-    assert "BRENT" in config.INSTRUMENTS
-    assert "JPN225" in config.INSTRUMENTS
+    assert "JPN225" in config.INSTRUMENTS          # Asia
+    assert "GER40" in config.INSTRUMENTS           # Europa
     assert "NAS100" not in config.INSTRUMENTS
     assert "UK100" not in config.INSTRUMENTS
+    # BRENT retirado del universo activo (sparse) pero su mapeo se conserva.
+    assert "BRENT" not in config.INSTRUMENTS
+    assert "BRENT" in config.DUKASCOPY_SYMBOLS
 
 
 # --- Decodificación (round-trip con el formato asumido) ---------------------

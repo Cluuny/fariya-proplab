@@ -114,13 +114,23 @@ def test_detect_calendar_gap():
     assert any(a.kind == "calendar_gap" for a in report.anomalies)
 
 
+def test_clean_drops_weekend_bars():
+    # Dukascopy trae barras de fin de semana (sesión parcial de domingo) → se dropean.
+    dates = pd.date_range("2020-01-01", periods=21, freq="D")  # incluye sáb/dom
+    df = pd.DataFrame({"close": np.arange(21, dtype=float) + 100},
+                      index=pd.DatetimeIndex(dates, name="date"))
+    out = loaders.clean(df)
+    assert (out.index.dayofweek < 5).all()          # sólo Lun-Vie
+    assert len(out) < len(df)                        # se quitaron fines de semana
+
+
 def _kinds(report):
     return {a.kind for a in report.anomalies}
 
 
-def test_contract_jump_is_open_gap_not_anomalous_return():
+def test_session_gap_is_open_gap_not_anomalous_return():
     # Cierres suaves (sin retorno close-to-close anómalo) pero un GAP de apertura
-    # grande en un día → contract_jump, NO anomalous_return.
+    # grande en un día → session_gap, NO anomalous_return.
     dates = pd.bdate_range("2020-01-01", periods=60)
     rng = np.random.default_rng(0)
     close = 100 + np.cumsum(rng.normal(0, 0.05, 60))   # muy suave
@@ -129,13 +139,13 @@ def test_contract_jump_is_open_gap_not_anomalous_return():
     df = pd.DataFrame({"open": open_, "close": close},
                       index=pd.DatetimeIndex(dates, name="date"))
     kinds = _kinds(loaders.validate("X", df))
-    assert "contract_jump" in kinds
+    assert "session_gap" in kinds
     assert "anomalous_return" not in kinds
 
 
 def test_anomalous_return_without_open_gap():
     # Outlier close-to-close pero SIN gap de apertura (open_t = close_{t-1}) →
-    # anomalous_return, NO contract_jump. Ya no coinciden.
+    # anomalous_return, NO session_gap. Ya no coinciden.
     dates = pd.bdate_range("2020-01-01", periods=60)
     close = np.full(60, 100.0)
     close[30] = 150.0                                   # salto close-to-close
@@ -146,7 +156,7 @@ def test_anomalous_return_without_open_gap():
                       index=pd.DatetimeIndex(dates, name="date"))
     kinds = _kinds(loaders.validate("X", df))
     assert "anomalous_return" in kinds
-    assert "contract_jump" not in kinds
+    assert "session_gap" not in kinds
 
 
 def test_report_renders_all_instruments(clean_series):

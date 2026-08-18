@@ -14,7 +14,7 @@ def test_directory_structure_exists():
 
 
 def test_config_universe():
-    assert len(config.INSTRUMENTS) == 10
+    assert len(config.INSTRUMENTS) == 9  # BRENT retirado (cobertura sparse)
     assert "EURUSD" in config.INSTRUMENTS
     assert config.ANOMALOUS_RETURN_SIGMA == 5.0
 

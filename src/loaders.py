@@ -113,21 +113,25 @@ def _close_series(df: pd.DataFrame) -> pd.Series:
 # Cleaning                                                                    #
 # --------------------------------------------------------------------------- #
 def clean(df: pd.DataFrame) -> pd.DataFrame:
-    """Sort by date, drop duplicate dates (keep the last one).
+    """Sort by date, drop duplicate dates (keep last) and weekend bars.
 
-    Does not invent data: it only sorts and deduplicates. Anomaly detection is
-    the responsibility of `validate`.
+    Weekend bars (Dukascopy serves a partial Sunday session of a few hours) are
+    dropped: a daily bar must be a full trading session. Their presence inflated
+    the bar count to ~313/year in FX and deflated the estimated volatility. The
+    weekend gap is still captured close-to-close in the Fri→Mon return. Does not
+    invent data otherwise; anomaly detection is `validate`'s responsibility.
     """
     out = df.sort_index()
     out = out[~out.index.duplicated(keep="last")]
+    out = out[out.index.dayofweek < 5]  # keep Mon-Fri only
     return out
 
 
 # --------------------------------------------------------------------------- #
 # Quality validation                                                          #
 # --------------------------------------------------------------------------- #
-def _detect_contract_jumps(df: pd.DataFrame, sigma: float) -> pd.Index:
-    """Session-open gaps that may indicate a contract rollover.
+def _detect_session_gaps(df: pd.DataFrame, sigma: float) -> pd.Index:
+    """Session-open gaps (open vs previous close).
 
     Distinct from close-to-close anomalous returns: a rollover shows as an
     overnight GAP between the previous close and the next open, not as an
@@ -187,9 +191,10 @@ def validate(
                 Anomaly(instrument, ts, "anomalous_return", f"z={z.loc[ts]:.1f}")
             )
 
-    # Contract-change jumps: overnight open gaps (distinct from anomalous_return).
-    for ts in _detect_contract_jumps(df, sigma):
-        anomalies.append(Anomaly(instrument, ts, "contract_jump"))
+    # Session gaps: overnight open gaps (distinct from anomalous_return; spot FX
+    # has no contracts, so this is a session gap, not a contract change).
+    for ts in _detect_session_gaps(df, sigma):
+        anomalies.append(Anomaly(instrument, ts, "session_gap"))
 
     # Calendar gaps: business days (Mon-Fri) with no observation.
     missing = 0

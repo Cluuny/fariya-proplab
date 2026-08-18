@@ -64,15 +64,51 @@ def test_costs_reduce_return_when_rotating():
     assert net < gross
 
 
-def test_buy_and_hold_no_recurring_costs():
+def test_buy_and_hold_no_recurring_turnover_cost():
+    # Buy&hold no rota tras la entrada → sin costo de TURNOVER recurrente. Con
+    # swap=0 el único costo es la entrada; el swap (recurrente) se prueba aparte.
     prices = _series_with_known_sharpe(0.0005, 0.01, n=300)
     w = signals.buy_and_hold(prices)
-    costs = {"SPX500": config.CostModel(spread=0.001, slippage=0.0005)}
+    costs = {"SPX500": config.CostModel(spread=0.001, slippage=0.0005, swap=0.0)}
 
     net = engine.backtest(prices, w, costs=costs)
     gross = engine.backtest(prices, w, apply_costs=False)
 
-    # They only differ on the entry day (t=0); afterwards, zero cost.
     diff = (gross - net)
-    assert diff.iloc[0] > 0            # initial entry charges a cost
-    assert np.allclose(diff.iloc[1:].to_numpy(), 0.0)  # no recurring costs
+    assert diff.iloc[0] > 0                              # la entrada cobra costo
+    assert np.allclose(diff.iloc[1:].to_numpy(), 0.0)    # sin turnover recurrente
+
+
+def test_buy_and_hold_incurs_recurring_swap():
+    # Con swap > 0, buy&hold SÍ incurre un costo diario de mantener (recurrente).
+    prices = _series_with_known_sharpe(0.0005, 0.01, n=300)
+    w = signals.buy_and_hold(prices)
+    costs = {"SPX500": config.CostModel(spread=0.0, slippage=0.0, swap=0.0002)}
+    net = engine.backtest(prices, w, costs=costs)
+    gross = engine.backtest(prices, w, apply_costs=False)
+    diff = (gross - net)
+    assert (diff.iloc[2:] > 0).all()                     # swap recurrente cada día
+
+
+def test_sharpe_annualizes_with_observed_bars_per_year():
+    # Dos series con distinto calendario se anualizan cada una con su conteo.
+    idx_daily = pd.bdate_range("2020-01-01", periods=520)   # ~260/año
+    idx_sparse = pd.bdate_range("2020-01-01", periods=520, freq="2B")  # ~130/año
+    r = np.full(520, 0.001)
+    s_daily = engine.sharpe(pd.Series(r, index=idx_daily))
+    s_sparse = engine.sharpe(pd.Series(r, index=idx_sparse))
+    # Mismo retorno/σ por barra pero distinto calendario → distinta anualización.
+    assert engine.bars_per_year(pd.Series(r, index=idx_daily)) > 200
+    assert engine.bars_per_year(pd.Series(r, index=idx_sparse)) < 160
+    assert s_daily > s_sparse
+
+
+def test_swap_scales_with_days_held():
+    dates = pd.bdate_range("2020-01-01", periods=60)
+    prices = pd.DataFrame({"X": np.full(60, 100.0)}, index=dates)  # sin movimiento
+    w = pd.DataFrame({"X": np.ones(60)}, index=dates)               # mantiene 1.0
+    costs = {"X": config.CostModel(spread=0, slippage=0, swap=0.001)}
+    net = engine.backtest(prices, w, costs=costs)
+    # Sin retorno ni turnover tras la entrada: la pérdida es puro swap diario.
+    assert net.iloc[1:].sum() < 0                       # swap acumula (negativo)
+    assert np.allclose(net.iloc[2:].to_numpy(), -0.001) # -swap por día mantenido
