@@ -26,9 +26,21 @@ El sistema SHALL producir exactamente un archivo parquet limpio por instrumento 
 - **WHEN** el pipeline procesa N instrumentos con datos crudos disponibles
 - **THEN** produce N archivos parquet en `data/clean/`, uno por instrumento, cada uno indexado por fecha ascendente y sin duplicados de fecha
 
+### Requirement: Sesiones de trading (sin barras de fin de semana)
+
+El sistema SHALL conservar en la serie limpia únicamente barras de días de trading (Lun-Vie), descartando las barras de sábado y domingo. Las barras de fin de semana de Dukascopy son sesiones parciales (pocas horas) que inflan el conteo de barras y deflactan la volatilidad estimada; una barra diaria debe representar una sesión completa.
+
+#### Scenario: La serie limpia no contiene barras de fin de semana
+- **WHEN** se limpia una serie de Dukascopy que incluye barras de sábado o domingo
+- **THEN** la serie limpia resultante no contiene barras con día de la semana sábado ni domingo
+
+#### Scenario: El conteo de barras por año es coherente con días hábiles
+- **WHEN** se inspecciona una serie de FX limpia de varios años
+- **THEN** el número de barras por año se aproxima al de días hábiles (~252-261), no a ~313 (que incluía la barra de domingo)
+
 ### Requirement: Validación de calidad de datos
 
-El sistema SHALL validar cada serie y detectar, como mínimo: gaps en el calendario de trading, precios en cero o no positivos, fechas duplicadas, retornos anómalos (magnitud mayor a 5σ), feriados mal marcados y saltos abruptos atribuibles a cambio de contrato. Cada anomalía detectada SHALL quedar registrada con instrumento, fecha y tipo. Los saltos por cambio de contrato SHALL detectarse como una señal **distinta** de los retornos anómalos —un **gap de apertura** entre sesiones (`open` vs cierre previo), no el retorno close-to-close— de modo que un mismo evento NO se cuente dos veces bajo dos tipos.
+El sistema SHALL validar cada serie y detectar, como mínimo: gaps en el calendario de trading, precios en cero o no positivos, fechas duplicadas, retornos anómalos (magnitud mayor a 5σ), feriados mal marcados y gaps de sesión abruptos. Cada anomalía detectada SHALL quedar registrada con instrumento, fecha y tipo. Los gaps de sesión SHALL registrarse bajo el tipo `session_gap` (un **gap de apertura** entre sesiones, `open` vs cierre previo, distinto del retorno close-to-close), NO como `contract_jump`: sobre spot FX no hay contratos, y el nombre debe reflejar que se detecta un gap de sesión, no un cambio de contrato. Un mismo evento NO SHALL contarse dos veces bajo dos tipos.
 
 #### Scenario: Se detectan y reportan anomalías
 - **WHEN** una serie contiene un retorno de magnitud mayor a 5σ, un precio en cero o una fecha duplicada
@@ -40,7 +52,7 @@ El sistema SHALL validar cada serie y detectar, como mínimo: gaps en el calenda
 
 #### Scenario: Salto de contrato y retorno anómalo son señales distintas
 - **WHEN** una serie tiene un gap de apertura grande entre sesiones sin un retorno close-to-close anómalo (o viceversa)
-- **THEN** el gap se registra como `contract_jump` y el retorno anómalo como `anomalous_return`, sin que un mismo evento se cuente bajo ambos tipos
+- **THEN** el gap se registra como `session_gap` y el retorno anómalo como `anomalous_return`, sin que un mismo evento se cuente bajo ambos tipos
 
 ### Requirement: Reporte de calidad legible
 
