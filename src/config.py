@@ -120,13 +120,16 @@ SHARPE_REFERENCE = SharpeReference(
     value=0.80,
     window="2011-09-19 to 2026-08-14",
     source=(
-        "Window-matched price-return anchor. Externally verified: the SPX500 level on "
-        "the first day (2011-09-19) is 1204.1, matching the PUBLIC S&P 500 close that "
-        "day (~1204.09) — the Dukascopy CFD IS the price index, not a scaled proxy. Over "
-        "the exact data window: price CAGR 13.3%/yr, realized vol 16.9% → Sharpe ≈ 0.79; "
-        "engine.sharpe (arithmetic mean) gives 0.82. The earlier 0.74 anchor used a "
-        "mismatched 2010-2025 window (started ~9 months earlier near a different level), "
-        "which explained the gap. Price-return (the CFD pays no dividends), not total-return."
+        "Window-matched price-return anchor over the exact data window "
+        "(2011-09-19 → 2026-08-14): price CAGR 13.3%/yr, realized vol 16.9% → Sharpe "
+        "≈0.79; engine.sharpe (arithmetic mean) gives 0.82. Corroboration of the level: "
+        "the SPX500 series starts at 1204.1 on 2011-09-19, consistent with the public "
+        "record — Wikipedia 'Closing milestones of the S&P 500' has the index ~1200 in "
+        "mid-Sep 2011, falling below 1100 by 2011-10-04 (consulted 2026-08-18). CAVEAT: "
+        "a precise independent daily close could NOT be fetched in-session (Stooq CSV "
+        "returned empty; FRED keeps only 10y of daily) — record a Stooq/Yahoo ^SPX "
+        "daily close with its consult date to fully close the external check. "
+        "Price-return (the CFD pays no dividends), not total-return."
     ),
     tolerance=0.10,
 )
@@ -141,6 +144,15 @@ TRADING_DAYS_PER_YEAR = 252
 # comparison against the literature. Absolute risk is controlled downstream by
 # vol-targeting and the simulator's leverage scaling, not by this cap.
 MAX_GROSS_EXPOSURE = 4.0
+
+# Sacred holdout (master document §3.5): the last 3 years are reserved and never
+# touched until a hypothesis's final validation. The policy — and H001's explicit
+# EXEMPTION (it is a pure external-replication calibration test, no tuning on our
+# data) — is documented in hypotheses/HOLDOUT.md. The holdout starts governing from
+# the first discovery/optimization hypothesis (H002 onward unless also exempt).
+from datetime import date as _date  # noqa: E402
+
+HOLDOUT_START = _date(2023, 8, 17)  # inclusive; last ~3 years reserved
 
 
 # --- Prop-firm rules (parameterized; do NOT hardcode a single firm) ---

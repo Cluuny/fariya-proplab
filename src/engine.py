@@ -21,12 +21,19 @@ from src import config
 def _asset_returns(prices: pd.DataFrame) -> pd.DataFrame:
     """Simple per-asset returns (pct_change), first row = 0.
 
-    Sanitizes non-finite values: a zero/non-positive price (an anomaly that
-    loaders flags but does not correct) would produce ±inf; it is neutralized
-    to 0.0 so that a single corrupt tick does not propagate inf across the whole
-    backtest and report.
+    Calendar-gap safe: with 9 instruments on 3 calendars, the combined frame has
+    NaN where an instrument did not trade. Forward-filling the PRICE per column
+    before pct_change makes a non-traded day earn 0 (a held position holds, no
+    move) and attributes the reopen move to the reopen day — NOT dropping it (as
+    a naive pct_change().fillna(0) does: both the gap day AND the reopen day
+    become 0, silently losing the real cross-gap return) and NOT forward-filling
+    it onto the wrong day (subtle look-ahead). Leading NaN (before an instrument
+    exists) stays NaN → 0 (there is no position there anyway).
+
+    Also sanitizes non-finite values: a zero/non-positive price (an anomaly that
+    loaders flags but does not correct) would produce ±inf; neutralized to 0.0.
     """
-    ret = prices.pct_change()
+    ret = prices.ffill().pct_change()
     return ret.replace([np.inf, -np.inf], np.nan).fillna(0.0)
 
 
