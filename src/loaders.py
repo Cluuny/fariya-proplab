@@ -75,7 +75,15 @@ def read_raw(path: Path) -> pd.DataFrame:
             break
     if date_col is None:
         date_col = df.columns[0]
-    idx = pd.to_datetime(df[date_col], errors="coerce", utc=False)
+    col = df[date_col]
+    # A numeric date column is an epoch timestamp (e.g. dukascopy-node exports
+    # `timestamp` in milliseconds). Parse with the right unit; otherwise parse
+    # as a datetime string.
+    if pd.api.types.is_numeric_dtype(col):
+        unit = "ms" if col.abs().max() > 1e11 else "s"
+        idx = pd.to_datetime(col, unit=unit, errors="coerce", utc=False)
+    else:
+        idx = pd.to_datetime(col, errors="coerce", utc=False)
     df = df.drop(columns=[date_col])
     df.index = pd.DatetimeIndex(idx.dt.normalize() if hasattr(idx, "dt") else idx, name="date")
     # Normalize price column names to known lowercase forms.
