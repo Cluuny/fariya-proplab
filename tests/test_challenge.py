@@ -150,15 +150,23 @@ def test_changing_rules_changes_result():
 
 
 # --- Section 4: economic metrics --------------------------------------------
-def test_expected_net_value_monotonic_in_edge():
-    # More edge (same vol) → higher value per year, both defined (long horizon).
+def test_economic_value_retired():
+    # The provisional per-year value was retired (misspecified + hidden knob):
+    # expected_net_value is always nan, an absent value instead of a wrong one.
+    r = _gaussian_returns(0.0006, 0.01, n=4000, seed=10)
     p = config.SimulatorParams(n_bootstraps=3000, horizon_days=1500, seed=1, block_size=20)
-    r_low = _gaussian_returns(0.0006, 0.01, n=4000, seed=10)
-    r_high = _gaussian_returns(0.0012, 0.01, n=4000, seed=10)  # more drift, same vol
-    net_low = challenge.simulate_challenge(r_low, params=p, with_leverage_curve=False).expected_net_value
-    net_high = challenge.simulate_challenge(r_high, params=p, with_leverage_curve=False).expected_net_value
-    assert np.isfinite(net_low) and np.isfinite(net_high)
-    assert net_high > net_low
+    res = challenge.simulate_challenge(r, params=p, with_leverage_curve=False)
+    assert np.isnan(res.expected_net_value)
+
+
+def test_expected_days_nan_when_insufficient_horizon():
+    # expected_days must NOT be a biased number conditioned on the fast-absorbing
+    # few when the guard fires — it is nan, like the (retired) value.
+    r = _gaussian_returns(0.00005, 0.01, n=4000, seed=15)
+    p = config.SimulatorParams(n_bootstraps=3000, horizon_days=120, seed=1, block_size=20)
+    res = challenge.simulate_challenge(r, params=p, leverage=0.25, with_leverage_curve=False)
+    assert res.insufficient_horizon
+    assert np.isnan(res.expected_days_to_pass)
 
 
 # --- Section 5: leverage curves (both reported; no single optimum yet) ------
@@ -172,7 +180,8 @@ def test_optimal_leverage_is_none_pending_objective():
     assert res.optimal_leverage is None
     assert res.optimal_leverage_reason  # non-empty explanation
     assert res.leverage_pass_curve.size == res.leverage_grid.size
-    assert res.leverage_value_curve.size == res.leverage_grid.size
+    assert res.leverage_burn_curve.size == res.leverage_grid.size  # P(quemar) diagnóstica
+    assert not hasattr(res, "leverage_value_curve")  # curva de valor retirada
 
 
 def test_p_burn_rises_with_leverage():

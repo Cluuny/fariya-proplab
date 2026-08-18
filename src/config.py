@@ -105,12 +105,11 @@ class FirmRules:
     max_drawdown: float = 0.10         # static max drawdown (10%)
     n_payouts: int = 4                 # number of payout cycles N considered
     fee: float = 500.0                 # challenge fee cost (USD)
-    # Funded-phase parameters. The payout per cycle is DERIVED by simulating the
-    # funded phase (it scales with the strategy return), NOT fixed by hand. These
-    # are real firm rules, not invented cost knobs.
-    profit_split: float = 0.80         # trader's share of funded-phase profit
-    payout_interval_days: int = 21     # length of a payout cycle (~1 month)
-    account_capital: float = 100_000.0 # funded account size (USD), for unit consistency
+    # Length of a payout cycle (~1 month). Used by the funded-phase survival
+    # simulation that produces P(burn). (The provisional per-year value that used
+    # profit_split/account_capital was retired — it was misspecified and carried a
+    # hidden knob; the real threshold objective is built in weeks 9-10.)
+    payout_interval_days: int = 21
 
 
 DEFAULT_FIRM_RULES = FirmRules()

@@ -68,7 +68,6 @@ def render_challenge(result) -> str:
         f"| P(pasar fase 2) | {result.p_phase2:.4f} |",
         f"| Días esperados hasta pasar | {result.expected_days_to_pass:.1f} |",
         f"| P(quemar antes del payout N) | {result.p_burn_before_payout:.4f} |",
-        f"| Valor por año (USD, provisional) | {result.expected_net_value:.2f} |",
         (
             f"| Apalancamiento óptimo (decisión) | {result.optimal_leverage:.2f}× |"
             if result.optimal_leverage is not None
@@ -82,18 +81,18 @@ def render_challenge(result) -> str:
         lines += [
             "### Curva de apalancamiento",
             "",
-            "Ambas curvas son diagnósticas. `P(pasar | absorbió)` es monótona "
-            "(favorece bajo leverage, tesis §2.1); el valor por año es provisional "
-            "(payout endógeno; el objetivo de decisión se define en sem 9-10). No se "
-            "colapsa a un único óptimo: hacerlo hoy lo fijaría una perilla, no los datos.",
+            "Curvas diagnósticas. `P(pasar | absorbió)` es monótona (favorece bajo "
+            "leverage, tesis §2.1); `P(quemar)` sube con el leverage. NO hay curva de "
+            "valor (se retiró: mal especificada + perilla oculta) ni un óptimo único: "
+            "el objetivo de decisión es el objetivo umbral (§1.2), se define en sem 9-10.",
             "",
-            "| Leverage | P(pasar\\|absorbió) | Valor/año (prov.) |",
+            "| Leverage | P(pasar\\|absorbió) | P(quemar) |",
             "|---|---|---|",
         ]
-        val = result.leverage_value_curve
+        burn = result.leverage_burn_curve
         for i, (k, p) in enumerate(zip(result.leverage_grid, result.leverage_pass_curve)):
-            v = f"{val[i]:.0f}" if i < len(val) and not (val[i] != val[i]) else "—"
-            lines.append(f"| {k:.2f}× | {p:.4f} | {v} |")
+            b = f"{burn[i]:.4f}" if i < len(burn) else "—"
+            lines.append(f"| {k:.2f}× | {p:.4f} | {b} |")
         lines.append("")
     return "\n".join(lines)
 
