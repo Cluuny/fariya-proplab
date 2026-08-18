@@ -83,8 +83,12 @@ class CostModel:
     commission: float = 0.0         # commission per rotated unit
     # Swap/carry: a DAILY charge proportional to |weight| HELD (not to turnover).
     # First-order cost for long-holding strategies like TSMOM (holds for weeks);
-    # without it the backtest reports returns that do not exist. Placeholder ~3bp
-    # per day; calibrate with real broker swap rates per instrument.
+    # without it the backtest reports returns that do not exist. Placeholder
+    # ~0.3 bp/day (0.00003), realistic for a ~1%/yr rate differential (≈0.27
+    # bp/day); calibrate with real broker swap rates per instrument.
+    # KNOWN LIMITATION: this swap is UNSIGNED (always a cost on |weight|), a
+    # conservative approximation for trend (H001). It is a BLOCKER for carry
+    # (H002), where the signed rate differential IS the strategy return.
     swap: float = 0.00003
 
 
@@ -113,17 +117,18 @@ class SharpeReference:
 # the acceptance test reads this structure.
 SHARPE_REFERENCE = SharpeReference(
     instrument="SPX500",
-    value=0.75,
-    window="2011-2026",
+    value=0.80,
+    window="2011-09-19 to 2026-08-14",
     source=(
-        "EXTERNAL price-return anchor (independent of our data): S&P 500 price index "
-        "~1258 (end-2010) → ~6300 (2025) over ~14.9y ≈ 11.4%/yr price CAGR, realized "
-        "vol ~15-16% → Sharpe ≈ 0.74. The Dukascopy CFD pays no dividends, so this is "
-        "compared price-return, NOT total-return. Our engine's gross buy&hold reproduces "
-        "~0.82 within tolerance. Still AMBER: this is a plausibility anchor, not a "
-        "rigorous published figure for the exact period."
+        "Window-matched price-return anchor. Externally verified: the SPX500 level on "
+        "the first day (2011-09-19) is 1204.1, matching the PUBLIC S&P 500 close that "
+        "day (~1204.09) — the Dukascopy CFD IS the price index, not a scaled proxy. Over "
+        "the exact data window: price CAGR 13.3%/yr, realized vol 16.9% → Sharpe ≈ 0.79; "
+        "engine.sharpe (arithmetic mean) gives 0.82. The earlier 0.74 anchor used a "
+        "mismatched 2010-2025 window (started ~9 months earlier near a different level), "
+        "which explained the gap. Price-return (the CFD pays no dividends), not total-return."
     ),
-    tolerance=0.15,
+    tolerance=0.10,
 )
 
 # Trading days per year (fallback for synthetic series without a calendar; real
