@@ -1,7 +1,7 @@
-"""Configuración explícita y versionada del laboratorio (decisión D6).
+"""Explicit, versioned lab configuration (decision D6).
 
-Todo lo que afecta un resultado medido vive aquí, no incrustado ad hoc en el
-código, para que los backtests sean reproducibles y ajustables.
+Everything that affects a measured result lives here, not embedded ad hoc in the
+code, so that backtests are reproducible and adjustable.
 """
 
 from __future__ import annotations
@@ -9,13 +9,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-# --- Rutas ---
+# --- Paths ---
 ROOT = Path(__file__).resolve().parent.parent
 DATA_RAW = ROOT / "data" / "raw"
 DATA_CLEAN = ROOT / "data" / "clean"
 RESULTS = ROOT / "results"
 
-# --- Universo (documento maestro, sección 8.2) ---
+# --- Universe (master document, section 8.2) ---
 INSTRUMENTS: tuple[str, ...] = (
     "EURUSD",
     "GBPUSD",
@@ -29,48 +29,48 @@ INSTRUMENTS: tuple[str, ...] = (
     "UK100",
 )
 
-# --- Validación de calidad de datos ---
-# Umbral de retorno anómalo, en desviaciones estándar (documento: >5σ).
+# --- Data quality validation ---
+# Anomalous return threshold, in standard deviations (document: >5σ).
 ANOMALOUS_RETURN_SIGMA = 5.0
 
 
 @dataclass(frozen=True)
 class CostModel:
-    """Costos de operar un instrumento. Aplicados SOLO por engine.py.
+    """Costs of trading an instrument. Applied ONLY by engine.py.
 
-    Todos en fracción del notional operado (p. ej. 0.0001 = 1 bp), salvo
-    ``commission_per_unit`` que es por unidad de peso rotado.
+    All as a fraction of the traded notional (e.g. 0.0001 = 1 bp), except
+    ``commission_per_unit`` which is per unit of rotated weight.
     """
 
-    spread: float = 0.0001          # medio spread efectivo por lado
-    slippage: float = 0.00005       # deslizamiento por lado
-    impact: float = 0.0             # impacto de mercado por unidad rotada
-    commission: float = 0.0         # comisión por unidad rotada
+    spread: float = 0.0001          # effective half spread per side
+    slippage: float = 0.00005       # slippage per side
+    impact: float = 0.0             # market impact per rotated unit
+    commission: float = 0.0         # commission per rotated unit
 
 
-# Modelo de costos por defecto y overrides por instrumento.
+# Default cost model and per-instrument overrides.
 DEFAULT_COST = CostModel()
 COSTS: dict[str, CostModel] = {sym: DEFAULT_COST for sym in INSTRUMENTS}
 
 
 @dataclass(frozen=True)
 class SharpeReference:
-    """Sharpe histórico conocido de referencia para verificar el motor.
+    """Known historical reference Sharpe to verify the engine.
 
-    La verificación se expresa como tolerancia, no igualdad exacta, y la
-    fuente/ventana se fijan aquí para que el test sea reproducible.
+    The verification is expressed as a tolerance, not exact equality, and the
+    source/window are fixed here so that the test is reproducible.
     """
 
     instrument: str
     value: float
-    window: str          # p. ej. "2005-2023"
-    source: str          # de dónde viene el número de referencia
-    tolerance: float     # tolerancia absoluta admitida en el Sharpe
+    window: str          # e.g. "2005-2023"
+    source: str          # where the reference number comes from
+    tolerance: float     # absolute tolerance allowed on the Sharpe
 
 
-# Referencia por defecto para el test de verificación de engine.py.
-# NOTA: el valor concreto se fija al disponer del dato histórico real; el test
-# de aceptación lee esta estructura.
+# Default reference for the engine.py verification test.
+# NOTE: the concrete value is fixed once the real historical data is available;
+# the acceptance test reads this structure.
 SHARPE_REFERENCE = SharpeReference(
     instrument="SPX500",
     value=0.0,
@@ -79,55 +79,55 @@ SHARPE_REFERENCE = SharpeReference(
     tolerance=0.15,
 )
 
-# Días de trading al año, para anualizar Sharpe.
+# Trading days per year, to annualize Sharpe.
 TRADING_DAYS_PER_YEAR = 252
 
 
-# --- Reglas de la firma de fondeo (parametrizadas; NO hardcodear una firma) ---
+# --- Prop-firm rules (parameterized; do NOT hardcode a single firm) ---
 @dataclass(frozen=True)
 class FirmRules:
-    """Reglas de un challenge de cuenta de fondeo.
+    """Rules of a funded-account challenge.
 
-    Todas las magnitudes de barrera se expresan como FRACCIÓN del capital
-    inicial (p. ej. 0.10 = 10%). El drawdown es ESTÁTICO (contra capital
-    inicial, no trailing — documento maestro sección 2.2).
+    All barrier magnitudes are expressed as a FRACTION of the initial capital
+    (e.g. 0.10 = 10%). The drawdown is STATIC (against initial capital, not
+    trailing — master document section 2.2).
 
-    NOTA sobre P&L aditivo: el simulador acumula P&L de forma ADITIVA sobre el
-    capital inicial (sizing estático), fiel al contrato real del challenge
-    (objetivo y drawdown en unidades monetarias contra el balance inicial, no en
-    espacio-log). El espacio-log SÓLO volvería a importar con sizing compuesto
-    sobre una cuenta fondeada con regla trailing; no se corrige ahora.
+    NOTE on additive P&L: the simulator accumulates P&L ADDITIVELY over the
+    initial capital (static sizing), faithful to the real challenge contract
+    (target and drawdown in monetary units against the initial balance, not in
+    log-space). Log-space would ONLY matter again with compound sizing over a
+    funded account with a trailing rule; it is not corrected now.
     """
 
-    phase1_target: float = 0.10        # objetivo fase 1 (+10%)
-    phase2_target: float = 0.05        # objetivo fase 2 (+5%)
-    daily_loss_limit: float = 0.05     # límite de pérdida diaria (5%)
-    max_drawdown: float = 0.10         # drawdown máximo estático (10%)
-    n_payouts: int = 4                 # nº de payouts N para "quemar cuenta"
-    fee: float = 500.0                 # costo de la cuota del challenge (USD)
-    payout_per_cycle: float = 1000.0   # payout esperado por ciclo tras fondeo (USD)
-    # Costo de oportunidad diario del capital inmovilizado (USD/día). Es el
-    # término que hace INTERIOR el óptimo de apalancamiento: su ubicación
-    # depende de este valor (más costo → óptimo a mayor leverage). Placeholder;
-    # calibrar con el capital real y su tasa de oportunidad.
+    phase1_target: float = 0.10        # phase 1 target (+10%)
+    phase2_target: float = 0.05        # phase 2 target (+5%)
+    daily_loss_limit: float = 0.05     # daily loss limit (5%)
+    max_drawdown: float = 0.10         # static max drawdown (10%)
+    n_payouts: int = 4                 # number of payouts N to "burn the account"
+    fee: float = 500.0                 # challenge fee cost (USD)
+    payout_per_cycle: float = 1000.0   # expected payout per cycle after funding (USD)
+    # Daily opportunity cost of the tied-up capital (USD/day). This is the term
+    # that makes the leverage optimum INTERIOR: its location depends on this
+    # value (more cost → optimum at higher leverage). Placeholder; calibrate
+    # with the real capital and its opportunity rate.
     daily_capital_cost: float = 10.0
 
 
 DEFAULT_FIRM_RULES = FirmRules()
 
 
-# --- Parámetros del simulador de barrera (challenge.py) ---
+# --- Barrier simulator parameters (challenge.py) ---
 @dataclass(frozen=True)
 class SimulatorParams:
-    """Configuración del simulador de barrera por block bootstrap."""
+    """Configuration of the block-bootstrap barrier simulator."""
 
-    block_size: int = 20               # tamaño de bloque (>1; ~1 mes de trading)
-    n_bootstraps: int = 10_000         # nº de trayectorias simuladas
-    horizon_days: int = 756            # horizonte máximo por fase (~3 años; FTMO
-                                       # eliminó el límite de tiempo, así que el
-                                       # horizonte es de modelado, no regla de firma)
-    seed: int = 12345                  # semilla para reproducibilidad
-    # Malla de apalancamiento: multiplicadores k evaluados para la curva P(pasar).
+    block_size: int = 20               # block size (>1; ~1 month of trading)
+    n_bootstraps: int = 10_000         # number of simulated paths
+    horizon_days: int = 756            # max horizon per phase (~3 years; FTMO
+                                       # removed the time limit, so the horizon
+                                       # is a modeling choice, not a firm rule)
+    seed: int = 12345                  # seed for reproducibility
+    # Leverage grid: multipliers k evaluated for the P(pass) curve.
     leverage_min: float = 0.25
     leverage_max: float = 3.0
     leverage_step: float = 0.25

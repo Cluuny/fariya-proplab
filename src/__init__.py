@@ -1,1 +1,1 @@
-"""Prop Lab — fábrica de veredictos para swing trading en cuentas de fondeo."""
+"""Prop Lab — verdict factory for swing trading on prop-firm funded accounts."""

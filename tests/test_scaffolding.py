@@ -1,4 +1,4 @@
-"""Section 1 — verifica estructura de repo, config y stubs."""
+"""Section 1 — verifies repo structure, config and stubs."""
 
 import importlib
 
@@ -30,7 +30,7 @@ def test_modules_importable():
 
 
 def test_challenge_module_exposes_simulator():
-    # challenge.py ya está implementado (Bloque B); antes era un stub.
+    # challenge.py is now implemented (Block B); it used to be a stub.
     from src import challenge
 
     assert callable(challenge.simulate_challenge)

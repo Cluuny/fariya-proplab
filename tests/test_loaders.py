@@ -1,5 +1,5 @@
-"""Section 2 — data-pipeline: inmutabilidad, determinismo, un parquet por
-instrumento, y detección de cada tipo de anomalía sobre datos sintéticos."""
+"""Section 2 — data-pipeline: immutability, determinism, one parquet per
+instrument, and detection of each anomaly kind on synthetic data."""
 
 import hashlib
 
@@ -87,7 +87,7 @@ def test_detect_nonpositive_price():
 def test_detect_anomalous_return():
     dates = pd.bdate_range("2020-01-01", periods=60)
     close = np.full(60, 100.0)
-    close[30] = 150.0  # salto grande -> retorno > 5σ
+    close[30] = 150.0  # large jump -> return > 5σ
     df = pd.DataFrame({"close": close}, index=pd.DatetimeIndex(dates, name="date"))
     report = loaders.validate("X", df)
     assert any(a.kind == "anomalous_return" for a in report.anomalies)

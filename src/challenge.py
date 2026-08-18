@@ -1,23 +1,23 @@
-"""challenge.py — Simulador de barrera (EL NÚCLEO diferenciador).
+"""challenge.py — Barrier simulator (THE differentiating CORE).
 
-El challenge de una cuenta de fondeo es un problema de primer paso con doble
-barrera: P(tocar +objetivo antes de −límite), no un problema de trading. Este
-módulo estima esa probabilidad y el valor económico esperado por simulación.
+A funded-account challenge is a first-passage problem with a double barrier:
+P(hit +target before −limit), not a trading problem. This module estimates that
+probability and the expected economic value by simulation.
 
-Método: block bootstrap (moving-block, NO i.i.d.) de los retornos diarios
-netos que produce engine.py. Preserva autocorrelación y clustering de
-volatilidad; un remuestreo i.i.d. subestimaría la volatilidad realista y daría
-un P(pasar) optimista y falso (documento maestro sección 2.1).
+Method: block bootstrap (moving-block, NOT i.i.d.) of the net daily returns
+produced by engine.py. It preserves autocorrelation and volatility clustering;
+an i.i.d. resample would underestimate the realistic volatility and give an
+optimistic, false P(pass) (master document section 2.1).
 
-Salidas (sección 3.4):
-- P(pasar fase 1), P(pasar fase 2), P(pasar ambas)
-- Días esperados hasta pasar
-- P(quemar la cuenta fondeada antes del payout N)
-- Valor esperado neto de cuotas  ← la métrica que decide
-- Curva P(pasar) vs apalancamiento → multiplicador óptimo
+Outputs (section 3.4):
+- P(pass phase 1), P(pass phase 2), P(pass both)
+- Expected days to pass
+- P(burn the funded account before payout N)
+- Expected net value after fees  ← the deciding metric
+- P(pass) vs leverage curve → optimal multiplier
 
-Verificación: contra la fórmula analítica cerrada de primer paso con doble
-barrera (ver `analytic_pass_probability`), no contra la intuición.
+Verification: against the closed-form analytic first-passage formula with a
+double barrier (see `analytic_pass_probability`), not against intuition.
 """
 
 from __future__ import annotations
@@ -30,17 +30,17 @@ from src import config
 
 
 # --------------------------------------------------------------------------- #
-# Resultado                                                                    #
+# Result                                                                       #
 # --------------------------------------------------------------------------- #
-# Resultados posibles de una trayectoria (contabilidad de tres resultados).
-UNRESOLVED = 0  # llegó al horizonte sin tocar ninguna barrera
-PASSED = 1      # alcanzó el objetivo
-FAILED = 2      # tocó el límite diario o el drawdown máximo
+# Possible outcomes of a path (three-outcome accounting).
+UNRESOLVED = 0  # reached the horizon without touching any barrier
+PASSED = 1      # reached the target
+FAILED = 2      # hit the daily limit or the max drawdown
 
 
 @dataclass
 class ChallengeResult:
-    """Salidas del simulador de barrera."""
+    """Outputs of the barrier simulator."""
 
     p_phase1: float
     p_phase2: float
@@ -48,7 +48,7 @@ class ChallengeResult:
     expected_days_to_pass: float
     p_burn_before_payout: float
     expected_net_value: float
-    # Contabilidad de tres resultados de la fase 1 (suman 1 con p_phase1).
+    # Three-outcome accounting for phase 1 (sum to 1 with p_phase1).
     p_fail: float = 0.0
     p_unresolved: float = 0.0
     horizon_days: int = 0
@@ -69,11 +69,11 @@ def block_bootstrap(
     block_size: int,
     rng: np.random.Generator,
 ) -> np.ndarray:
-    """Genera una matriz (n_paths, horizon) por moving-block bootstrap.
+    """Generate a (n_paths, horizon) matrix by moving-block bootstrap.
 
-    Se eligen bloques contiguos de longitud `block_size` desde posiciones de
-    inicio aleatorias (con wrap-around) y se concatenan hasta cubrir `horizon`.
-    `block_size=1` equivale a i.i.d. (sólo para verificación analítica).
+    Contiguous blocks of length `block_size` are picked from random start
+    positions (with wrap-around) and concatenated until `horizon` is covered.
+    `block_size=1` is equivalent to i.i.d. (only for analytic verification).
     """
     r = np.asarray(returns, dtype=float)
     n = r.size
@@ -83,45 +83,46 @@ def block_bootstrap(
         raise ValueError("block_size debe ser >= 1")
 
     n_blocks = int(np.ceil(horizon / block_size))
-    # Posiciones de inicio de cada bloque, para todas las trayectorias.
+    # Start positions of each block, for all paths.
     starts = rng.integers(0, n, size=(n_paths, n_blocks))
-    # Offsets dentro del bloque: 0..block_size-1
+    # Offsets within the block: 0..block_size-1
     offsets = np.arange(block_size)
-    # Índices (n_paths, n_blocks, block_size) con wrap-around.
+    # Indices (n_paths, n_blocks, block_size) with wrap-around.
     idx = (starts[:, :, None] + offsets[None, None, :]) % n
     sampled = r[idx].reshape(n_paths, n_blocks * block_size)
     return sampled[:, :horizon]
 
 
 # --------------------------------------------------------------------------- #
-# Evaluación de barreras (first passage)                                      #
+# Barrier evaluation (first passage)                                          #
 # --------------------------------------------------------------------------- #
 def _first_passage(
     paths: np.ndarray, target: float, daily_loss_limit: float, max_drawdown: float
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Evalúa cada trayectoria y devuelve (outcome, day_index).
+    """Evaluate each path and return (outcome, day_index).
 
-    `outcome` es un vector con la CONTABILIDAD DE TRES RESULTADOS:
-    `PASSED` (tocó el objetivo), `FAILED` (tocó el límite diario o el drawdown
-    máximo estático), o `UNRESOLVED` (llegó al final del horizonte sin tocar
-    ninguna barrera). NUNCA se pliega UNRESOLVED en FAILED: plegarlo invertiría
-    la conclusión del sistema (baja volatilidad tarda más en absorber y quedaría
-    castigada como fracaso).
+    `outcome` is a vector with the THREE-OUTCOME ACCOUNTING:
+    `PASSED` (hit the target), `FAILED` (hit the daily limit or the static max
+    drawdown), or `UNRESOLVED` (reached the end of the horizon without touching
+    any barrier). UNRESOLVED is NEVER folded into FAILED: folding it would
+    invert the system's conclusion (low volatility takes longer to absorb and
+    would be punished as a failure).
 
-    El P&L se acumula de forma ADITIVA sobre el capital inicial (sizing estático
-    relativo al balance inicial), que es lo que define un challenge: objetivo y
-    drawdown se miden como fracción del capital INICIAL, no compuesto. Esto
-    además coincide con la fórmula analítica de primer paso (proceso aditivo).
+    P&L is accumulated ADDITIVELY over the initial capital (static sizing
+    relative to the initial balance), which is what defines a challenge: target
+    and drawdown are measured as a fraction of the INITIAL capital, not
+    compounded. This also matches the analytic first-passage formula (additive
+    process).
 
-    Reglas, evaluadas por día:
-    - PASA: pnl >= target
-    - QUEMA: retorno diario <= -daily_loss_limit  (límite de pérdida diaria)
-             o pnl <= -max_drawdown               (drawdown estático vs inicial)
-    Gana el primer evento (first passage). `day_index` = día del evento de paso
-    (o horizonte si no pasa).
+    Rules, evaluated per day:
+    - PASS: pnl >= target
+    - BURN: daily return <= -daily_loss_limit  (daily loss limit)
+            or pnl <= -max_drawdown            (static drawdown vs initial)
+    The first event wins (first passage). `day_index` = day of the passing event
+    (or the horizon if it does not pass).
     """
     n_paths, horizon = paths.shape
-    level = np.zeros(n_paths)          # P&L acumulado (aditivo) vs capital inicial
+    level = np.zeros(n_paths)          # accumulated (additive) P&L vs initial capital
     passed = np.zeros(n_paths, dtype=bool)
     burned = np.zeros(n_paths, dtype=bool)
     day_passed = np.full(n_paths, horizon, dtype=int)
@@ -134,17 +135,17 @@ def _first_passage(
         level = np.where(active, level + r_t, level)
         pnl = level
 
-        # Quema: violación de límite diario o de drawdown estático.
+        # Burn: violation of the daily limit or the static drawdown.
         burn_now = active & ((r_t <= -daily_loss_limit) | (pnl <= -max_drawdown))
         burned |= burn_now
 
-        # Pasa: alcanza el objetivo sin haber quemado este mismo día.
+        # Pass: reaches the target without having burned on this same day.
         pass_now = active & ~burn_now & (pnl >= target)
         newly = pass_now & ~passed
         day_passed = np.where(newly, t + 1, day_passed)
         passed |= pass_now
 
-    # Contabilidad de tres resultados: quien no pasó ni quemó queda UNRESOLVED.
+    # Three-outcome accounting: whoever neither passed nor burned is UNRESOLVED.
     outcome = np.full(n_paths, UNRESOLVED, dtype=np.int8)
     outcome[passed] = PASSED
     outcome[burned] = FAILED
@@ -152,7 +153,7 @@ def _first_passage(
 
 
 # --------------------------------------------------------------------------- #
-# Simulador principal                                                         #
+# Main simulator                                                              #
 # --------------------------------------------------------------------------- #
 def simulate_challenge(
     returns,
@@ -162,10 +163,10 @@ def simulate_challenge(
     leverage: float = 1.0,
     with_leverage_curve: bool = True,
 ) -> ChallengeResult:
-    """Estima P(pasar) y métricas económicas de un challenge.
+    """Estimate P(pass) and the economic metrics of a challenge.
 
-    `returns`: serie/array de retornos diarios netos (de engine.py).
-    `leverage`: multiplicador aplicado a los retornos para esta corrida.
+    `returns`: series/array of net daily returns (from engine.py).
+    `leverage`: multiplier applied to the returns for this run.
     """
     r = np.asarray(getattr(returns, "to_numpy", lambda: returns)(), dtype=float)
     r = r[np.isfinite(r)]
@@ -175,7 +176,7 @@ def simulate_challenge(
     rng = np.random.default_rng(params.seed)
     scaled = r * leverage
 
-    # --- Fase 1 ---
+    # --- Phase 1 ---
     paths1 = block_bootstrap(
         scaled,
         n_paths=params.n_bootstraps,
@@ -191,7 +192,7 @@ def simulate_challenge(
     p_fail1 = float((outcome1 == FAILED).mean())
     p_unresolved1 = float((outcome1 == UNRESOLVED).mean())
 
-    # --- Fase 2 (independiente; P(ambas) = P1 * P2 condicional aprox.) ---
+    # --- Phase 2 (independent; P(both) = P1 * P2 conditional approx.) ---
     paths2 = block_bootstrap(
         scaled,
         n_paths=params.n_bootstraps,
@@ -206,20 +207,20 @@ def simulate_challenge(
     p_phase2 = float(passed2.mean())
     p_both = p_phase1 * p_phase2
 
-    # Días esperados hasta pasar ambas fases (condicionado a pasar). Si en alguna
-    # fase nada pasa dentro del horizonte, se acota al horizonte total.
+    # Expected days to pass both phases (conditional on passing). If nothing
+    # passes within the horizon in some phase, it is capped at the total horizon.
     if passed1.any() and passed2.any():
         expected_days = float(days1[passed1].mean() + days2[passed2].mean())
     else:
         expected_days = float(params.horizon_days * 2)
 
-    # --- P(quemar cuenta fondeada antes del payout N) ---
-    # Tras fondeo, cada ciclo de payout es como sobrevivir sin violar DD/daily.
-    # Reusar fase 2 como proxy de "ciclo de payout": quemar = no sobrevivir.
+    # --- P(burn the funded account before payout N) ---
+    # After funding, each payout cycle is like surviving without violating
+    # DD/daily. Reuse phase 2 as a proxy for a "payout cycle": burn = not survive.
     p_survive_cycle = p_phase2
     p_burn_before_payout = float(1.0 - p_survive_cycle**rules.n_payouts)
 
-    # --- Valor esperado neto de cuotas (pone precio al tiempo) ---
+    # --- Expected net value after fees (puts a price on time) ---
     expected_net = _expected_net_value(
         p_both, p_burn_before_payout, expected_days, rules
     )
@@ -236,11 +237,11 @@ def simulate_challenge(
         horizon_days=int(params.horizon_days),
     )
 
-    # --- Curva de apalancamiento ---
-    # Se reporta la curva P(pasar) como DIAGNÓSTICO (monótona decreciente en
-    # leverage con horizonte honesto), pero el apalancamiento de DECISIÓN sale
-    # de maximizar el valor esperado neto, que pone precio al tiempo/capital
-    # inmovilizado del bajo apalancamiento. argmax(P) daría el leverage mínimo.
+    # --- Leverage curve ---
+    # The P(pass) curve is reported as a DIAGNOSTIC (monotonically decreasing in
+    # leverage with an honest horizon), but the DECISION leverage comes from
+    # maximizing the expected net value, which prices the time/tied-up capital
+    # of low leverage. argmax(P) would give the minimum leverage.
     if with_leverage_curve:
         grid = np.arange(
             params.leverage_min,
@@ -268,21 +269,22 @@ def _expected_net_value(
     expected_days: float,
     rules: config.FirmRules,
 ) -> float:
-    """Valor esperado neto de cuotas — pone precio al tiempo.
+    """Expected net value after fees — puts a price on time.
 
-    - Nº esperado de intentos hasta pasar ambas fases ~ geométrica: 1/P(ambas).
-    - Costo de cuotas = intentos · fee.
-    - Costo del tiempo = días esperados (por intento) · intentos · costo diario
-      de capital inmovilizado. Este término es lo que hace que el óptimo de
-      apalancamiento sea INTERIOR: sin él, bajar el leverage sólo subiría P y el
-      óptimo caería en el mínimo (esperar casi infinito).
-    - Ingreso tras fondeo = payout esperado ponderado por sobrevivir al payout.
+    - Expected number of attempts until passing both phases ~ geometric:
+      1/P(both).
+    - Fee cost = attempts · fee.
+    - Time cost = expected days (per attempt) · attempts · daily cost of tied-up
+      capital. This term is what makes the leverage optimum INTERIOR: without
+      it, lowering the leverage would only raise P and the optimum would fall at
+      the minimum (waiting almost forever).
+    - Income after funding = expected payout weighted by surviving the payout.
 
-    Supuesto económico explícito: `rules.daily_capital_cost` es el costo de
-    oportunidad diario del capital mientras se intenta el challenge.
+    Explicit economic assumption: `rules.daily_capital_cost` is the daily
+    opportunity cost of the capital while attempting the challenge.
     """
     if p_both <= 0:
-        # Nunca pasa dentro del horizonte: sólo se acumulan cuotas y tiempo.
+        # Never passes within the horizon: only fees and time accumulate.
         return -1e12
     expected_attempts = 1.0 / p_both
     expected_fee_cost = expected_attempts * rules.fee
@@ -292,14 +294,14 @@ def _expected_net_value(
 
 
 # --------------------------------------------------------------------------- #
-# Oráculo analítico (verificación, no motor)                                  #
+# Analytic oracle (verification, not engine)                                  #
 # --------------------------------------------------------------------------- #
 def analytic_pass_probability(mu: float, sigma: float, a: float, b: float) -> float:
-    """Fórmula cerrada de primer paso con doble barrera.
+    """Closed-form first-passage formula with a double barrier.
 
-    P(tocar +b antes de −a) para una deriva `mu` y volatilidad `sigma`:
+    P(hit +b before −a) for a drift `mu` and volatility `sigma`:
         P = [1 − e^(−2μa/σ²)] / [1 − e^(−2μ(a+b)/σ²)]
-    Con μ=0 el límite es a/(a+b) (0.5 si a=b).
+    With μ=0 the limit is a/(a+b) (0.5 if a=b).
     """
     if sigma <= 0:
         raise ValueError("sigma debe ser > 0")

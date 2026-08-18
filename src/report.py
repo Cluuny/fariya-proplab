@@ -1,10 +1,10 @@
-"""report.py — Capa de reporte.
+"""report.py — Reporting layer.
 
-Regenera, de forma determinista y con un solo comando, el resumen de desempeño
-de una estrategia: equity curve, Sharpe, max drawdown y distribución de
-retornos. Reproducibilidad total: mismas entradas -> mismo reporte.
+Regenerates, deterministically and with a single command, the performance
+summary of a strategy: equity curve, Sharpe, max drawdown and return
+distribution. Full reproducibility: same inputs -> same report.
 
-Salida en markdown por defecto (legible y diffeable).
+Markdown output by default (readable and diffable).
 """
 
 from __future__ import annotations
@@ -18,12 +18,12 @@ from src import config, engine
 
 
 def equity_curve(returns: pd.Series) -> pd.Series:
-    """Curva de capital (base 1.0) a partir de retornos simples."""
+    """Equity curve (base 1.0) from simple returns."""
     return (1.0 + returns.fillna(0.0)).cumprod()
 
 
 def max_drawdown(returns: pd.Series) -> float:
-    """Máximo drawdown (fracción negativa, p. ej. -0.23) de la equity curve."""
+    """Maximum drawdown (negative fraction, e.g. -0.23) of the equity curve."""
     eq = equity_curve(returns)
     peak = eq.cummax()
     dd = eq / peak - 1.0
@@ -31,7 +31,7 @@ def max_drawdown(returns: pd.Series) -> float:
 
 
 def return_distribution(returns: pd.Series, bins: int = 10) -> pd.Series:
-    """Histograma de retornos: conteo por bucket (determinista)."""
+    """Return histogram: count per bucket (deterministic)."""
     r = returns.replace([np.inf, -np.inf], np.nan).dropna()
     if r.empty:
         return pd.Series(dtype=int)
@@ -41,7 +41,7 @@ def return_distribution(returns: pd.Series, bins: int = 10) -> pd.Series:
 
 
 def metrics(returns: pd.Series) -> dict:
-    """Métricas mínimas del reporte."""
+    """Minimum report metrics."""
     eq = equity_curve(returns)
     return {
         "n_obs": int(returns.dropna().shape[0]),
@@ -55,7 +55,7 @@ def metrics(returns: pd.Series) -> dict:
 
 
 def render_challenge(result) -> str:
-    """Sección markdown con los resultados del simulador de barrera."""
+    """Markdown section with the barrier simulator results."""
     lines = [
         "## Challenge (simulador de barrera)",
         "",
@@ -93,10 +93,10 @@ def render_challenge(result) -> str:
 
 
 def render(returns: pd.Series, name: str = "strategy", challenge_result=None) -> str:
-    """Reporte markdown determinista (sin timestamps).
+    """Deterministic markdown report (no timestamps).
 
-    Si se pasa `challenge_result` (de challenge.simulate_challenge), se anexa la
-    sección del simulador de barrera.
+    If `challenge_result` (from challenge.simulate_challenge) is passed, the
+    barrier simulator section is appended.
     """
     m = metrics(returns)
     lines = [
@@ -119,7 +119,7 @@ def render(returns: pd.Series, name: str = "strategy", challenge_result=None) ->
     ]
     eq = equity_curve(returns)
     if len(eq):
-        # Muestrear hasta ~20 puntos para un reporte compacto y determinista.
+        # Sample up to ~20 points for a compact, deterministic report.
         step = max(1, len(eq) // 20)
         sampled = eq.iloc[::step]
         lines.append("| Fecha | Equity |")
@@ -142,7 +142,7 @@ def generate(
     out_dir: Path = config.RESULTS,
     challenge_result=None,
 ) -> Path:
-    """Escribe el reporte a `results/<name>/report.md` y devuelve la ruta."""
+    """Write the report to `results/<name>/report.md` and return the path."""
     dest = out_dir / name
     dest.mkdir(parents=True, exist_ok=True)
     path = dest / "report.md"
@@ -151,7 +151,7 @@ def generate(
 
 
 def _load_prices() -> pd.DataFrame | None:
-    """Carga precios de cierre de `data/clean/` si existen, uno por columna."""
+    """Load close prices from `data/clean/` if they exist, one per column."""
     files = sorted(config.DATA_CLEAN.glob("*.parquet"))
     if not files:
         return None

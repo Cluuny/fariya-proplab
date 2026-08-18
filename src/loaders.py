@@ -1,17 +1,17 @@
-"""loaders.py — Capa de datos: raw -> clean + validación de calidad.
+"""loaders.py — Data layer: raw -> clean + quality validation.
 
-Convierte dumps crudos (`data/raw/`, INMUTABLE) en parquet limpio
-(`data/clean/`, uno por instrumento) y produce un reporte de calidad legible.
+Converts raw dumps (`data/raw/`, IMMUTABLE) into clean parquet
+(`data/clean/`, one per instrument) and produces a readable quality report.
 
-Reglas duras (documento maestro):
-- `data/raw/` nunca se modifica; toda salida limpia es derivada y regenerable.
-- Un archivo parquet por instrumento, indexado por fecha ascendente, sin
-  fechas duplicadas.
+Hard rules (master document):
+- `data/raw/` is never modified; every clean output is derived and regenerable.
+- One parquet file per instrument, indexed by ascending date, with no
+  duplicate dates.
 
-Formato de crudo esperado por defecto: CSV con una columna de fecha y columnas
-de precio (OHLC o al menos cierre). El parseo concreto de Dukascopy se ajusta
-al inspeccionar el primer dump real (design.md — Open Questions); el contrato
-público de este módulo no cambia por ello.
+Default expected raw format: CSV with a date column and price columns (OHLC or
+at least close). The concrete Dukascopy parsing is tuned once the first real
+dump is inspected (design.md — Open Questions); the public contract of this
+module does not change because of it.
 """
 
 from __future__ import annotations
@@ -24,14 +24,14 @@ import pandas as pd
 
 from src import config
 
-# Columnas de precio candidatas, en orden de preferencia para "cierre".
+# Candidate price columns, in order of preference for "close".
 _CLOSE_CANDIDATES = ("close", "Close", "CLOSE", "adj_close", "Adj Close")
 _PRICE_COLUMNS = ("open", "high", "low", "close")
 
 
 @dataclass
 class Anomaly:
-    """Una anomalía detectada: instrumento, fecha y tipo."""
+    """A detected anomaly: instrument, date and kind."""
 
     instrument: str
     date: pd.Timestamp | None
@@ -41,7 +41,7 @@ class Anomaly:
 
 @dataclass
 class QualityReport:
-    """Reporte de calidad de un instrumento."""
+    """Quality report for an instrument."""
 
     instrument: str
     n_obs: int
@@ -58,16 +58,16 @@ class QualityReport:
 
 
 # --------------------------------------------------------------------------- #
-# Lectura de crudos (sin mutarlos)                                            #
+# Reading raw files (without mutating them)                                   #
 # --------------------------------------------------------------------------- #
 def read_raw(path: Path) -> pd.DataFrame:
-    """Lee un archivo crudo a DataFrame indexado por fecha, sin modificar el archivo.
+    """Read a raw file into a date-indexed DataFrame, without modifying the file.
 
-    Acepta CSV con una columna de fecha (primera columna con nombre tipo
-    date/time/timestamp o la primera columna a secas) y columnas de precio.
+    Accepts CSV with a date column (first column named like
+    date/time/timestamp, or just the first column) and price columns.
     """
     df = pd.read_csv(path)
-    # Detectar columna de fecha.
+    # Detect the date column.
     date_col = None
     for c in df.columns:
         if str(c).lower() in ("date", "time", "timestamp", "datetime", "gmt time"):
@@ -78,7 +78,7 @@ def read_raw(path: Path) -> pd.DataFrame:
     idx = pd.to_datetime(df[date_col], errors="coerce", utc=False)
     df = df.drop(columns=[date_col])
     df.index = pd.DatetimeIndex(idx.dt.normalize() if hasattr(idx, "dt") else idx, name="date")
-    # Normalizar nombres de columnas de precio a minúsculas conocidas.
+    # Normalize price column names to known lowercase forms.
     rename = {}
     for c in df.columns:
         lc = str(c).lower()
@@ -94,7 +94,7 @@ def _close_series(df: pd.DataFrame) -> pd.Series:
     for name in ("close", *_CLOSE_CANDIDATES):
         if name in df.columns:
             return pd.to_numeric(df[name], errors="coerce")
-    # Fallback: primera columna numérica.
+    # Fallback: first numeric column.
     num = df.select_dtypes(include="number")
     if num.shape[1] == 0:
         raise ValueError("No se encontró columna de precio numérica")
@@ -102,13 +102,13 @@ def _close_series(df: pd.DataFrame) -> pd.Series:
 
 
 # --------------------------------------------------------------------------- #
-# Limpieza                                                                    #
+# Cleaning                                                                    #
 # --------------------------------------------------------------------------- #
 def clean(df: pd.DataFrame) -> pd.DataFrame:
-    """Ordena por fecha, elimina duplicados de fecha (conserva el último).
+    """Sort by date, drop duplicate dates (keep the last one).
 
-    No inventa datos: sólo ordena y deduplica. La detección de anomalías es
-    responsabilidad de `validate`.
+    Does not invent data: it only sorts and deduplicates. Anomaly detection is
+    the responsibility of `validate`.
     """
     out = df.sort_index()
     out = out[~out.index.duplicated(keep="last")]
@@ -116,12 +116,12 @@ def clean(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # --------------------------------------------------------------------------- #
-# Validación de calidad                                                       #
+# Quality validation                                                          #
 # --------------------------------------------------------------------------- #
 def _detect_contract_jumps(returns: pd.Series, sigma: float) -> pd.Index:
-    """Saltos abruptos candidatos a cambio de contrato: retorno > `sigma`·σ.
+    """Abrupt jumps that may indicate a contract change: return > `sigma`·σ.
 
-    Se reporta como banderas para revisión humana, no se corrige.
+    Reported as flags for human review, not corrected.
     """
     if returns.std(ddof=0) == 0 or returns.dropna().empty:
         return returns.index[:0]
@@ -136,28 +136,28 @@ def validate(
     raw_had_duplicates: bool = False,
     sigma: float = config.ANOMALOUS_RETURN_SIGMA,
 ) -> QualityReport:
-    """Valida una serie ya ordenada y detecta anomalías.
+    """Validate an already-sorted series and detect anomalies.
 
-    Detecta: gaps de calendario (días hábiles faltantes), precios en cero/no
-    positivos, fechas duplicadas (en el crudo), retornos anómalos > `sigma`·σ,
-    y saltos abruptos por posible cambio de contrato.
+    Detects: calendar gaps (missing business days), zero/non-positive prices,
+    duplicate dates (in the raw file), anomalous returns > `sigma`·σ, and
+    abrupt jumps from a possible contract change.
     """
     anomalies: list[Anomaly] = []
     close = _close_series(df)
 
-    # Precios en cero o no positivos.
+    # Zero or non-positive prices.
     nonpos = close[(close <= 0) | close.isna()]
     for ts in nonpos.index:
         anomalies.append(Anomaly(instrument, ts, "nonpositive_price"))
 
-    # Fechas duplicadas (detectadas antes de deduplicar).
+    # Duplicate dates (detected before deduplicating).
     if raw_had_duplicates:
         anomalies.append(Anomaly(instrument, None, "duplicate_dates"))
 
-    # Retornos.
+    # Returns.
     returns = np.log(close.where(close > 0)).diff()
 
-    # Retornos anómalos (>sigma·σ).
+    # Anomalous returns (>sigma·σ).
     std = returns.std(ddof=0)
     if std and not np.isnan(std) and std > 0:
         mean = returns.mean()
@@ -167,11 +167,11 @@ def validate(
                 Anomaly(instrument, ts, "anomalous_return", f"z={z.loc[ts]:.1f}")
             )
 
-    # Saltos por cambio de contrato (bandera para revisión humana).
+    # Contract-change jumps (flag for human review).
     for ts in _detect_contract_jumps(returns, sigma):
         anomalies.append(Anomaly(instrument, ts, "contract_jump"))
 
-    # Gaps de calendario: días hábiles (Mon-Fri) sin observación.
+    # Calendar gaps: business days (Mon-Fri) with no observation.
     missing = 0
     if len(df.index) >= 2:
         bdays = pd.bdate_range(df.index.min(), df.index.max())
@@ -192,7 +192,7 @@ def validate(
 
 
 # --------------------------------------------------------------------------- #
-# Orquestación raw -> clean                                                   #
+# raw -> clean orchestration                                                  #
 # --------------------------------------------------------------------------- #
 def _instrument_from_path(path: Path) -> str:
     return path.stem.upper()
@@ -201,7 +201,7 @@ def _instrument_from_path(path: Path) -> str:
 def process_file(
     raw_path: Path, clean_dir: Path = config.DATA_CLEAN
 ) -> tuple[Path, QualityReport]:
-    """Procesa un crudo -> parquet limpio + reporte, sin tocar el crudo."""
+    """Process one raw file -> clean parquet + report, without touching the raw file."""
     instrument = _instrument_from_path(raw_path)
     raw = read_raw(raw_path)
     had_dupes = bool(raw.index.duplicated().any())
@@ -214,7 +214,7 @@ def process_file(
 
 
 def render_report(reports: list[QualityReport]) -> str:
-    """Reporte de calidad legible (markdown) por instrumento."""
+    """Readable quality report (markdown), per instrument."""
     lines = ["# Reporte de calidad de datos", ""]
     lines.append("| Instrumento | Obs | Desde | Hasta | Días faltantes | Anomalías |")
     lines.append("|---|---|---|---|---|---|")
@@ -242,7 +242,7 @@ def render_report(reports: list[QualityReport]) -> str:
 def run(
     raw_dir: Path = config.DATA_RAW, clean_dir: Path = config.DATA_CLEAN
 ) -> list[QualityReport]:
-    """Procesa todos los crudos y escribe el reporte de calidad."""
+    """Process all raw files and write the quality report."""
     raw_files = sorted(
         p for p in raw_dir.glob("*") if p.suffix.lower() in (".csv", ".txt")
     )
