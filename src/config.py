@@ -30,8 +30,11 @@ INSTRUMENTS: tuple[str, ...] = (
     "SPX500",
     "GER40",
     "JPN225",
-    "BRENT",
 )
+# BRENT retirado del universo activo: cobertura diaria de Dukascopy sparse (~168
+# obs/año, ~1421 días hábiles faltantes en 15 años → inusable). Se conserva su
+# mapeo abajo; evaluar un símbolo de energía más denso (p. ej. WTI LIGHTCMDUSD)
+# antes de re-incluir energía por decorrelación.
 
 # --- Internal symbol → Dukascopy instrument code ---
 # Internal names do not match Dukascopy's; every universe instrument MUST have a
@@ -74,10 +77,15 @@ class CostModel:
     ``commission_per_unit`` which is per unit of rotated weight.
     """
 
-    spread: float = 0.0001          # effective half spread per side
-    slippage: float = 0.00005       # slippage per side
+    spread: float = 0.0001          # effective half spread per side (per rotated unit)
+    slippage: float = 0.00005       # slippage per side (per rotated unit)
     impact: float = 0.0             # market impact per rotated unit
     commission: float = 0.0         # commission per rotated unit
+    # Swap/carry: a DAILY charge proportional to |weight| HELD (not to turnover).
+    # First-order cost for long-holding strategies like TSMOM (holds for weeks);
+    # without it the backtest reports returns that do not exist. Placeholder ~3bp
+    # per day; calibrate with real broker swap rates per instrument.
+    swap: float = 0.00003
 
 
 # Default cost model and per-instrument overrides.
@@ -105,19 +113,29 @@ class SharpeReference:
 # the acceptance test reads this structure.
 SHARPE_REFERENCE = SharpeReference(
     instrument="SPX500",
-    value=0.77,
+    value=0.75,
     window="2011-2026",
     source=(
-        "Dukascopy SPX500 CFD daily buy&hold (via dukascopy-node). Data-derived "
-        "regression anchor, consistent with the known strong S&P 500 Sharpe (~0.7-0.8) "
-        "over the 2011-2026 bull market. NOT a fully independent external check — a "
-        "published total-return Sharpe for the exact period would green milestone 2."
+        "EXTERNAL price-return anchor (independent of our data): S&P 500 price index "
+        "~1258 (end-2010) → ~6300 (2025) over ~14.9y ≈ 11.4%/yr price CAGR, realized "
+        "vol ~15-16% → Sharpe ≈ 0.74. The Dukascopy CFD pays no dividends, so this is "
+        "compared price-return, NOT total-return. Our engine's gross buy&hold reproduces "
+        "~0.82 within tolerance. Still AMBER: this is a plausibility anchor, not a "
+        "rigorous published figure for the exact period."
     ),
     tolerance=0.15,
 )
 
-# Trading days per year, to annualize Sharpe.
+# Trading days per year (fallback for synthetic series without a calendar; real
+# series are annualized with their own observed bars/year — see engine.bars_per_year).
 TRADING_DAYS_PER_YEAR = 252
+
+# Max gross exposure `sum(|weights|)` allowed for a conforming signal. Relaxed
+# from a hard 1: TSMOM with inverse-vol sizing over several instruments runs 2-4×
+# gross naturally; forcing ≤1 would crush volatility below target and break the
+# comparison against the literature. Absolute risk is controlled downstream by
+# vol-targeting and the simulator's leverage scaling, not by this cap.
+MAX_GROSS_EXPOSURE = 4.0
 
 
 # --- Prop-firm rules (parameterized; do NOT hardcode a single firm) ---

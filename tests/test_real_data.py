@@ -38,10 +38,11 @@ def test_engine_reproduces_reference_sharpe_on_real_data():
     prices = pd.DataFrame(
         {ref.instrument: pd.read_parquet(config.DATA_CLEAN / f"{ref.instrument}.parquet")["close"]}
     )
-    net = engine.backtest(prices, signals.buy_and_hold(prices))
-    got = engine.sharpe(net)
+    # Gross (index) buy&hold — the index Sharpe excludes trading costs like swap.
+    gross = engine.backtest(prices, signals.buy_and_hold(prices), apply_costs=False)
+    got = engine.sharpe(gross)   # annualized with the series' own bars/year
     assert abs(got - ref.value) <= ref.tolerance, (
-        f"Sharpe real {got:.3f} vs referencia {ref.value} (±{ref.tolerance})"
+        f"Sharpe real {got:.3f} vs referencia externa {ref.value} (±{ref.tolerance})"
     )
 
 
@@ -53,13 +54,13 @@ def test_quality_report_flags_a_real_market_event():
     assert "anomalous_return" in kinds
 
 
-def test_contract_jump_no_longer_equals_anomalous_return():
+def test_session_gap_no_longer_equals_anomalous_return():
     # El fix: los conteos ya NO coinciden (dejó de haber doble conteo).
     equal = 0
     for p in _PARQUETS:
         rep = loaders.validate(p.stem, pd.read_parquet(p))
         counts = rep.counts_by_kind()
-        if counts.get("anomalous_return", 0) == counts.get("contract_jump", -1):
+        if counts.get("anomalous_return", 0) == counts.get("session_gap", -1):
             equal += 1
     # No pueden coincidir todos (antes coincidían los 10 por construcción).
     assert equal < len(_PARQUETS)

@@ -16,6 +16,8 @@ from typing import Protocol
 
 import pandas as pd
 
+from src import config
+
 # Numerical tolerance for the exposure invariant.
 _EXPOSURE_TOL = 1e-9
 
@@ -28,18 +30,30 @@ class Signal(Protocol):
         ...
 
 
-def check_exposure(weights: pd.DataFrame, tol: float = _EXPOSURE_TOL) -> pd.Index:
-    """Return the dates where sum(|weights|) exceeds 1 (empty if conforming)."""
+def check_exposure(
+    weights: pd.DataFrame,
+    max_gross: float = config.MAX_GROSS_EXPOSURE,
+    tol: float = _EXPOSURE_TOL,
+) -> pd.Index:
+    """Dates where sum(|weights|) exceeds `max_gross` (empty if conforming).
+
+    The cap is `max_gross` (default from config), not a hard 1: inverse-vol
+    sizing runs 2-4× gross naturally; absolute risk is controlled downstream.
+    """
     gross = weights.abs().sum(axis=1)
-    return weights.index[gross > 1 + tol]
+    return weights.index[gross > max_gross + tol]
 
 
-def validate_weights(weights: pd.DataFrame, tol: float = _EXPOSURE_TOL) -> None:
+def validate_weights(
+    weights: pd.DataFrame,
+    max_gross: float = config.MAX_GROSS_EXPOSURE,
+    tol: float = _EXPOSURE_TOL,
+) -> None:
     """Validate the exposure invariant; raises ValueError if violated."""
-    bad = check_exposure(weights, tol)
+    bad = check_exposure(weights, max_gross, tol)
     if len(bad):
         raise ValueError(
-            f"Exposición > 1 en {len(bad)} fecha(s): {list(bad[:5])}"
+            f"Exposición > {max_gross} en {len(bad)} fecha(s): {list(bad[:5])}"
             + (" …" if len(bad) > 5 else "")
         )
 
