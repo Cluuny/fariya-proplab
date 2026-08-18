@@ -1,0 +1,98 @@
+# =============================================================================
+# H001 — Time-Series Momentum (TSMOM)
+# Ficha de PRE-REGISTRO (protocolo anti-autoengaño, documento maestro §3.5/§7.1).
+# El FALSADOR y la regla testeable se escriben ANTES de correr nada. No se editan
+# cuando aparezca un resultado que guste. La señal se implementa en un change
+# aparte, contra este contrato.
+# =============================================================================
+
+id: H001
+
+fuente:
+  tipo: paper
+  cita: "Moskowitz, Ooi & Pedersen (2012), Time Series Momentum, Journal of Financial Economics"
+  url: "https://www.sciencedirect.com/science/article/abs/pii/S0304405X11002613"
+  fecha_publicacion: 2012
+
+# --- CLASIFICACIÓN ---
+familia: trend
+mecanismo: conductual + riesgo
+explicacion_economica: >
+  Subreacción a información nueva (conductual) más una prima por transferencia de
+  riesgo: los productores/hedgers comerciales pagan por cubrirse, y el especulador
+  que toma el otro lado cobra esa prima montado en la tendencia. Contraparte: los
+  hedgers comerciales que aceptan perder en promedio a cambio de certeza.
+estructura: time_series          # cada instrumento contra su propio pasado, NO cross-sectional
+direccionalidad: long_short
+
+# --- OPERABILIDAD (adaptado a NUESTRO setup real, no al del paper) ---
+# ADAPTACIÓN: el paper usa 58 futuros líquidos; nosotros 9 instrumentos spot/CFD.
+# Menos diversificación → el Sharpe ~1.2 del paper NO es nuestro listón.
+instrumentos: [EURUSD, GBPUSD, USDJPY, AUDUSD, USDCAD, XAUUSD, SPX500, GER40, JPN225]
+n_instrumentos: 9
+frecuencia_datos: diaria
+horizonte_holding_dias: 21        # rebalanceo mensual
+datos_requeridos: [precio_ohlc]
+costo_datos_usd_mes: 0            # Dukascopy gratis
+operable_en_prop: true            # swing, diario, sin cross-sectional de acciones
+razon_si_no: null
+
+# --- RESULTADO ORIGINAL ---
+periodo_original: "1965-2009"
+sharpe_reportado: 1.2             # portafolio de 58 futuros — NO es nuestro listón (ver n_instrumentos)
+max_dd_reportado: null
+n_operaciones: ">2000"
+costos_incluidos: true
+
+# --- EVIDENCIA EXTERNA ---
+veredicto_externo: confirmado_con_degradacion
+replicaciones_encontradas:
+  - "AQR (2017): confirma el efecto out-of-sample"
+  - "CXO Advisory (2019): degradación material post-2010"
+
+# --- HIPÓTESIS TESTEABLE ---
+hipotesis: >
+  El signo del retorno a 12 meses de un instrumento predice positivamente su
+  retorno del mes siguiente, en nuestro panel de 9 instrumentos (FX majors, oro,
+  índices de renta variable).
+regla_entrada: "long si ret_12m > 0, short si ret_12m < 0"
+# ADAPTACIÓN: ret_12m = retorno de 12 MESES de CALENDARIO por instrumento, sobre
+# su propio calendario de cotización (el motor es gap-safe). NO 252 barras fijas.
+regla_salida: "rebalanceo mensual"
+sizing: >
+  Volatilidad inversa: pesos relativos w_i proporcionales a 1/vol_i, con vol_i
+  estimada por engine.rolling_vol (gap-safe, sobre días propios de cada
+  instrumento). Luego un escalado GLOBAL del portafolio para apuntar a ~8% de
+  volatilidad anual de PORTAFOLIO (documento §1.2), NO 10% por instrumento.
+  Exposición bruta acotada por config.MAX_GROSS_EXPOSURE (=4); si el escalado a
+  8% excede el bruto máximo, se recorta y se documenta.
+universo_test: >
+  Los 9 instrumentos, cada uno sobre su período disponible tras 12 meses de
+  lookback: FX y oro desde ~2004-2005, índices (SPX500/JPN225) desde ~2012,
+  GER40 desde ~2014. Casi todo el período es post-2010.
+costos: >
+  El motor aplica spread, slippage y swap. NOTA: el swap actual NO tiene dirección
+  (siempre resta sobre |peso|) — aproximación CONSERVADORA aceptable para trend
+  (errar hacia abajo es el lado seguro). Es bloqueante de H002/carry, no de H001.
+holdout: exento
+holdout_razon: >
+  H001 es una replicación de un paper de 1965-2009: todo nuestro período
+  (2011-2026) es out-of-sample respecto al paper y no hay tuneo sobre nuestros
+  datos. Ver hypotheses/HOLDOUT.md y config.HOLDOUT_START (2023-08-17); el holdout
+  sagrado rige desde la primera hipótesis de descubrimiento (H002 en adelante).
+metrica_exito: >
+  Sharpe NETO (tras costos) > 0.4 sobre el período disponible → viable, promueve.
+  Entre 0.2 y 0.4 = marginal (no muere pero no promueve). El Sharpe es INVARIANTE
+  al apalancamiento, por eso el veredicto no depende de optimal_leverage (diferido
+  al objetivo umbral, sem 9-10). P(pasar challenge) del simulador es diagnóstico
+  secundario, NO falsador.
+FALSADOR: >
+  Si el Sharpe NETO < 0.2 sobre el período disponible, H001 se descarta y NO se
+  reintenta con variantes. (La cláusula del falsador original "o si el efecto
+  desaparece post-2010" se subsume: nuestra muestra es casi toda post-2010.)
+
+# --- GESTIÓN DE COLA ---
+score_prioridad: null            # se asigna con el score §5.1 al entrar en cola de tests
+estado: pre_registrado
+intentos_realizados: 0
+fecha_test: null
