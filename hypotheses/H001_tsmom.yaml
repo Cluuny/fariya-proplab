@@ -58,41 +58,122 @@ hipotesis: >
 regla_entrada: "long si ret_12m > 0, short si ret_12m < 0"
 # ADAPTACIÓN: ret_12m = retorno de 12 MESES de CALENDARIO por instrumento, sobre
 # su propio calendario de cotización (el motor es gap-safe). NO 252 barras fijas.
-regla_salida: "rebalanceo mensual"
+regla_salida: "rebalanceo mensual (ver rebalanceo, abajo)"
+rebalanceo:
+  # El día de decisión debe ser determinista; la ejecución es del motor (shift 1).
+  dia_decision: "primer día hábil de cada mes"
+  si_no_cotiza: >
+    Si un instrumento no cotiza el primer día hábil del mes, su decisión usa el
+    último precio disponible (ya forward-filled) y la ejecución cae en su
+    siguiente día de cotización vía el shift(1) del motor. No se salta el mes.
+alineacion:
+  # Escrito aunque esté en engine._asset_returns: el pre-registro lo exige fijado.
+  frame: "unión de fechas de cotización de los 9 instrumentos"
+  precio: "forward-fill del precio por instrumento sobre el frame unión"
+  retorno_hueco: >
+    El retorno que cruza un hueco de calendario se atribuye al día de REAPERTURA
+    del instrumento (no se dropea ni se adelanta); un día no cotizado rinde 0.
+    Coincide con engine._asset_returns (prices.ffill().pct_change()).
 sizing: >
   Volatilidad inversa: pesos relativos w_i proporcionales a 1/vol_i, con vol_i
   estimada por engine.rolling_vol (gap-safe, sobre días propios de cada
   instrumento). Luego un escalado GLOBAL del portafolio para apuntar a ~8% de
   volatilidad anual de PORTAFOLIO (documento §1.2), NO 10% por instrumento.
+  EX-ANTE (obligatorio): ese escalado es un ESCALAR RODANTE que en cada fecha usa
+  SÓLO la vol de portafolio observada hasta esa fecha (p. ej. vol a 63 días de la
+  serie de retornos de portafolio con w.shift(1)), NUNCA la vol realizada de toda
+  la serie —eso sería look-ahead en la capa de señal, que el guard del motor no
+  atrapa. No afecta al falsador (el Sharpe es invariante al escalado) pero un
+  backtest con look-ahead en el sizing ensucia el diagnóstico del simulador.
   Exposición bruta acotada por config.MAX_GROSS_EXPOSURE (=4); si el escalado a
   8% excede el bruto máximo, se recorta y se documenta.
-universo_test: >
-  Los 9 instrumentos, cada uno sobre su período disponible tras 12 meses de
-  lookback: FX y oro desde ~2004-2005, índices (SPX500/JPN225) desde ~2012,
-  GER40 desde ~2014. Casi todo el período es post-2010.
+universo_test:
+  # DOS muestras REPORTADAS POR SEPARADO (no una corrida agrupada): agrupado no se
+  # puede atribuir un buen resultado a un régimen ni VER la degradación post-2010.
+  muestra_A:
+    descripcion: "FX + oro, incluye la crisis de 2008 (único régimen de estrés real disponible)"
+    instrumentos: [EURUSD, GBPUSD, USDJPY, AUDUSD, USDCAD, XAUUSD]
+    periodo: "2004-2026"
+    nota: "~22% de días-instrumento son pre-2010; ahí está 2008. Es el test de estrés."
+  muestra_B:
+    descripcion: "los 9 instrumentos, todos con 12 meses de lookback completo"
+    instrumentos: [EURUSD, GBPUSD, USDJPY, AUDUSD, USDCAD, XAUUSD, SPX500, GER40, JPN225]
+    periodo: "2015-2026"
+    nota: "GER40 arranca 2013-09-30 → tradeable desde ~2014-10; se toma 2015 por holgura."
 costos: >
   El motor aplica spread, slippage y swap. NOTA: el swap actual NO tiene dirección
   (siempre resta sobre |peso|) — aproximación CONSERVADORA aceptable para trend
   (errar hacia abajo es el lado seguro). Es bloqueante de H002/carry, no de H001.
+sensibilidad_costos:
+  # El swap es un placeholder; el veredicto no debe depender de él sin decirlo.
+  swap_bp_dia: [0.0, 0.3, 1.0]
+  regla: >
+    Las tres corridas se reportan. Si el veredicto cambia de lado del falsador
+    dentro de este rango, el veredicto es sobre el PLACEHOLDER de swap y NO sobre
+    la estrategia, y se declara así explícitamente (no se elige la corrida que
+    guste).
 holdout: exento
 holdout_razon: >
-  H001 es una replicación de un paper de 1965-2009: todo nuestro período
-  (2011-2026) es out-of-sample respecto al paper y no hay tuneo sobre nuestros
-  datos. Ver hypotheses/HOLDOUT.md y config.HOLDOUT_START (2023-08-17); el holdout
-  sagrado rige desde la primera hipótesis de descubrimiento (H002 en adelante).
+  H001 es una replicación de un efecto publicado (paper 1965-2009) SIN tuneo sobre
+  nuestros datos: esa es la razón de la exención, no la cronología. NOTA de
+  precisión: la Muestra A (2004-2026) sí solapa el final de la ventana del paper
+  (2004-2009 ∈ 1965-2009), pero sobre instrumentos spot distintos a los 58 futuros
+  del paper y sin optimizar ningún parámetro contra nuestra data. Ver
+  hypotheses/HOLDOUT.md y config.HOLDOUT_START (2023-08-17); el holdout sagrado
+  rige desde la primera hipótesis de DESCUBRIMIENTO (H002 en adelante).
+# Expectativa COMPROMETIDA antes de correr: sin esto, un 0.45 se leería como éxito
+# y un 0.25 como "mi universo es distinto" — ambas lecturas serían post-hoc.
+resultado_esperado:
+  sharpe_central: 0.40
+  rango: [0.25, 0.60]
+  derivacion: >
+    Ley Fundamental de la gestión activa (Grinold-Kahn): IR ≈ IC·√BR.
+    1.2 × √(9/58) = 0.47 naive; la amplitud efectiva es menor que 9 (el factor USD
+    lo comparten 5 pares; los 3 índices correlacionan 0.5-0.7) → ~4-5 apuestas
+    independientes → ~0.35-0.45; la degradación post-2010 (CXO) resta.
+  desviaciones:
+    - "9 vs 58 instrumentos → BAJA el Sharpe (efecto dominante, menos amplitud)"
+    - "diario vs mensual → NEUTRO en Sharpe, SUBE turnover y costos"
+    - "CFD spot vs futuros → BAJA (swap peor, sin roll yield)"
+    - "2004-2026 vs 1965-2009 → BAJA (degradación post-2010 documentada)"
 metrica_exito: >
-  Sharpe NETO (tras costos) > 0.4 sobre el período disponible → viable, promueve.
-  Entre 0.2 y 0.4 = marginal (no muere pero no promueve). El Sharpe es INVARIANTE
+  Sharpe NETO (tras costos) > 0.4 EN UNA MUESTRA → viable en ese régimen, promueve.
+  Se evalúa POR MUESTRA (A y B por separado), no agrupado. El Sharpe es INVARIANTE
   al apalancamiento, por eso el veredicto no depende de optimal_leverage (diferido
   al objetivo umbral, sem 9-10). P(pasar challenge) del simulador es diagnóstico
   secundario, NO falsador.
+zona_marginal:
+  # Sharpe neto en [0.2, 0.4]: es donde Grinold-Kahn dice que es más probable que
+  # caiga. Un limbo sin regla es donde vive la tentación de probar variantes.
+  rango: [0.2, 0.4]
+  decision: un_chequeo_robustez
+  regla: >
+    Se corre UNA sola variante pre-especificada —lookback de 6 meses en vez de
+    12— contada como intento (intentos_realizados pasa a 2), y se reporta el
+    DEFLATED Sharpe (corrección por multiplicidad). NINGUNA variante más: ni
+    tuneo de vol target, ni de umbrales, ni de instrumentos.
 FALSADOR: >
-  Si el Sharpe NETO < 0.2 sobre el período disponible, H001 se descarta y NO se
-  reintenta con variantes. (La cláusula del falsador original "o si el efecto
-  desaparece post-2010" se subsume: nuestra muestra es casi toda post-2010.)
+  Falsador de nivel: si el Sharpe NETO < 0.2 en una muestra, H001 se descarta en
+  ese régimen y NO se reintenta con variantes (salvo el único chequeo de
+  zona_marginal si cae en [0.2, 0.4]). Regla de DOS MUESTRAS (devuelve la cláusula
+  post-2010 que la evidencia externa marca como lo más relevante): si la Muestra A
+  (2004-2026, incluye 2008) funciona (Sharpe ≥ 0.4) y la Muestra B (2015-2026) no
+  (< 0.2), el HALLAZGO es la degradación post-2010 —H001 no se declara viable en
+  régimen moderno, se documenta como efecto degradado, NO como molestia.
 
 # --- GESTIÓN DE COLA ---
 score_prioridad: null            # se asigna con el score §5.1 al entrar en cola de tests
 estado: pre_registrado
 intentos_realizados: 0
 fecha_test: null
+enmiendas:
+  # La ficha se puede fortalecer SÓLO mientras nada se haya ejecutado. Tras el
+  # primer test (fecha_test != null) el falsador y resultado_esperado se CONGELAN.
+  - fecha: 2026-08-18
+    tipo: pre_ejecucion            # intentos_realizados=0, fecha_test=null
+    que: >
+      Dos muestras separadas (A: FX+oro 2004-2026 con 2008; B: los 9 2015-2026);
+      cláusula post-2010 devuelta al falsador; regla escrita para la zona marginal
+      [0.2,0.4] (un chequeo de robustez); resultado_esperado con derivación
+      Grinold-Kahn y dirección por desviación; sensibilidad al swap; vol-targeting
+      ex-ante; rebalanceo y alineación deterministas.
