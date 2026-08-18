@@ -1,4 +1,4 @@
-"""Section 5 — reporting: métricas mínimas presentes y reporte determinista."""
+"""Section 5 — reporting: minimum metrics present and deterministic report."""
 
 import numpy as np
 import pandas as pd
@@ -39,9 +39,9 @@ def test_generate_writes_file(tmp_path):
 
 
 def test_equity_curve_and_drawdown():
-    # Serie con caída conocida: +10% luego -50%.
+    # Series with a known drawdown: +10% then -50%.
     r = pd.Series([0.10, -0.50], index=pd.bdate_range("2020-01-01", periods=2))
     eq = report.equity_curve(r)
     assert np.isclose(eq.iloc[-1], 1.10 * 0.50)
-    # Desde el pico (1.10) cae a 0.55 → DD = 0.55/1.10 - 1 = -0.5.
+    # From the peak (1.10) it falls to 0.55 → DD = 0.55/1.10 - 1 = -0.5.
     assert np.isclose(report.max_drawdown(r), -0.5)

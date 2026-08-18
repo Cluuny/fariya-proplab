@@ -1,47 +1,47 @@
 # Prop Lab
 
-Sistema de investigación y backtesting para swing trading en cuentas de fondeo.
-Fábrica de veredictos: convierte una hipótesis escrita en un número medido —
-`P(pasar el challenge)` — de forma repetible.
+Research and backtesting system for swing trading on prop-firm funded accounts.
+A verdict factory: turns a written hypothesis into a measured number —
+`P(pasar el challenge)` — repeatably.
 
-Ver `PropLab_Documento_Maestro.pdf` para la tesis, el marco conceptual y el plan de ataque.
+See `PropLab_Documento_Maestro.pdf` for the thesis, the conceptual framework and the plan of attack.
 
-## Arquitectura (sección 3.3 del documento maestro)
+## Architecture (section 3.3 of the master document)
 
 ```
-prop-lab/                 # esta raíz ES prop-lab (no hay subcarpeta)
+prop-lab/                 # this root IS prop-lab (no subfolder)
 ├── data/
-│   ├── raw/              # dumps de Dukascopy, INMUTABLE, nunca se tocan
-│   └── clean/            # parquet, un archivo por instrumento (derivado)
+│   ├── raw/              # Dukascopy dumps, IMMUTABLE, never touched
+│   └── clean/            # parquet, one file per instrument (derived)
 ├── src/
-│   ├── config.py         # instrumentos, costos, referencia de Sharpe
-│   ├── loaders.py        # raw → clean + validación de calidad
-│   ├── signals.py        # funciones PURAS: precios → pesos objetivo (contrato con Flujo 2)
-│   ├── engine.py         # pesos → retornos netos con costos (único punto de costos)
-│   ├── challenge.py      # retornos → P(pasar)  ← NÚCLEO (stub; Bloque B)
-│   └── report.py         # todo → HTML/markdown reproducible
-├── hypotheses/           # pre-registro + falsador + veredicto (fases futuras)
-├── notebooks/            # exploración desechable
-├── results/              # un directorio por hipótesis, inmutable
+│   ├── config.py         # instruments, costs, Sharpe reference
+│   ├── loaders.py        # raw → clean + quality validation
+│   ├── signals.py        # PURE functions: prices → target weights (contract with Flow 2)
+│   ├── engine.py         # weights → net returns with costs (single cost point)
+│   ├── challenge.py      # returns → P(pass)  ← CORE (stub; Block B)
+│   └── report.py         # everything → reproducible HTML/markdown
+├── hypotheses/           # pre-registration + falsifier + verdict (future phases)
+├── notebooks/            # throwaway exploration
+├── results/              # one directory per hypothesis, immutable
 └── tests/
 ```
 
-## Reglas duras
+## Hard rules
 
-- `data/raw/` es inmutable: toda salida limpia es derivada y regenerable.
-- `signals.py` son funciones puras (sin estado, sin I/O, `sum(|pesos|) <= 1`).
-- `engine.py` es el único módulo que aplica costos.
-- Todo reporte es regenerable con un comando (reproducibilidad total).
+- `data/raw/` is immutable: every clean output is derived and regenerable.
+- `signals.py` are pure functions (stateless, no I/O, `sum(|weights|) <= 1`).
+- `engine.py` is the only module that applies costs.
+- Every report is regenerable with a single command (full reproducibility).
 
-## Uso
+## Usage
 
 ```bash
-uv sync                    # instalar dependencias
-python -m src.loaders      # raw → clean parquet + reporte de calidad
+uv sync                    # install dependencies
+python -m src.loaders      # raw → clean parquet + quality report
 uv run pytest              # tests
 ```
 
-## Estado
+## Status
 
-Bloque A (semanas 1-3): datos + motor + reporte. `challenge.py`, las hipótesis
-reales y el Flujo 2 (investigación) llegan en changes posteriores.
+Block A (weeks 1-3): data + engine + report. `challenge.py`, the real
+hypotheses and Flow 2 (research) arrive in later changes.

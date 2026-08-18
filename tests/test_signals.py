@@ -1,5 +1,5 @@
-"""Section 3 — signal-contract: pureza/determinismo, forma de salida,
-invariante de exposición y señal de referencia buy & hold."""
+"""Section 3 — signal-contract: purity/determinism, output shape,
+exposure invariant and buy & hold reference signal."""
 
 import numpy as np
 import pandas as pd
@@ -24,7 +24,7 @@ def test_determinism_and_no_mutation(prices):
     w1 = signals.buy_and_hold(prices)
     w2 = signals.buy_and_hold(prices)
     pd.testing.assert_frame_equal(w1, w2)
-    pd.testing.assert_frame_equal(prices, snapshot)  # entradas intactas
+    pd.testing.assert_frame_equal(prices, snapshot)  # inputs intact
 
 
 def test_output_shape(prices):
@@ -35,15 +35,15 @@ def test_output_shape(prices):
 
 def test_buy_and_hold_constant_and_conforming(prices):
     w = signals.buy_and_hold(prices)
-    # Pesos constantes en el tiempo.
+    # Weights constant over time.
     assert (w.nunique() == 1).all()
-    # Invariante de exposición.
+    # Exposure invariant.
     signals.validate_weights(w)
     assert len(signals.check_exposure(w)) == 0
 
 
 def test_exposure_violation_detected(prices):
-    bad = pd.DataFrame(0.6, index=prices.index, columns=prices.columns[:2])  # suma=1.2
+    bad = pd.DataFrame(0.6, index=prices.index, columns=prices.columns[:2])  # sum=1.2
     offending = signals.check_exposure(bad)
     assert len(offending) == len(prices.index)
     with pytest.raises(ValueError):
@@ -51,5 +51,5 @@ def test_exposure_violation_detected(prices):
 
 
 def test_exposure_conforming_accepted(prices):
-    ok = pd.DataFrame(0.3, index=prices.index, columns=prices.columns[:2])  # suma=0.6
-    signals.validate_weights(ok)  # no lanza
+    ok = pd.DataFrame(0.3, index=prices.index, columns=prices.columns[:2])  # sum=0.6
+    signals.validate_weights(ok)  # does not raise
