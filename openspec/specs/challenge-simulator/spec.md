@@ -40,17 +40,16 @@ El sistema SHALL aceptar las reglas de la firma como parámetros y NO hardcodear
 
 ### Requirement: Métricas económicas del challenge
 
-El sistema SHALL estimar los días esperados hasta pasar, la probabilidad de quemar la cuenta fondeada antes del payout `N`, y el valor económico del challenge, todo **condicionado a la absorción** (nunca tratando SIN ABSORBER como fallo). En particular:
+El sistema SHALL estimar los días esperados hasta pasar y la probabilidad de quemar la cuenta fondeada antes del payout `N`, todo **condicionado a la absorción** (nunca tratando SIN ABSORBER como fallo). El sistema SHALL NOT reportar un número de valor económico hasta que el objetivo de decisión esté definido (objetivo umbral, sem 9-10): reporta sólo las primitivas honestas (P condicional a absorción, `P(quemar)`), en vez de un valor por unidad de tiempo mal especificado (el valor provisional asumía reingreso ilimitado a la cuota y su óptimo caía en el borde del grid). En particular:
 
-- La probabilidad de pasar de decisión SHALL ser condicional a que la trayectoria absorbió: `p_cond = p_pasar / (p_pasar + p_fallar)` por fase; el número esperado de intentos SHALL ser `1 / (p_cond1 · p_cond2)`.
-- La probabilidad de quemar la cuenta fondeada SHALL basarse en NO tocar la barrera de pérdida (complemento de FALLA), no en alcanzar el objetivo; `P(quemar)` SHALL crecer con el apalancamiento.
-- Los días esperados SHALL incluir el tiempo consumido por los intentos fallidos (no sólo el de las ganadoras), registrando el día de absorción tanto para PASADAS como para QUEMADAS.
-- El valor económico SHALL expresarse como valor por unidad de tiempo, y el `payout` esperado por ciclo SHALL derivarse simulando la fase fondeada (proporción de reparto × retorno esperado condicionado a sobrevivir), NO fijarse como constante independiente del apalancamiento.
-- Si la fracción SIN ABSORBER excede un umbral (p. ej. 5%) en alguna fase, el sistema SHALL marcar "horizonte insuficiente" y NO reportar un valor económico (devolver `nan`/bandera) en vez de un número engañoso.
+- La probabilidad de pasar de decisión SHALL ser condicional a absorción: `p_cond = p_pasar / (p_pasar + p_fallar)` por fase.
+- `P(quemar)` SHALL basarse en NO tocar la barrera de pérdida (complemento de FALLA) y SHALL crecer con el apalancamiento.
+- Los días esperados SHALL incluir el tiempo de los intentos fallidos (día de absorción de PASADAS y QUEMADAS).
+- Si la fracción SIN ABSORBER excede un umbral (p. ej. 5%) en alguna fase, el sistema SHALL marcar "horizonte insuficiente" y los **días esperados** y el **valor económico** SHALL ser `nan` (una estimación condicionada al pequeño subconjunto que absorbió sería sesgada).
 
 #### Scenario: Reporta las métricas económicas
-- **WHEN** se corre el simulador con horizonte suficiente (fracción sin absorber baja) y payout derivado de la fase fondeada
-- **THEN** devuelve días esperados hasta pasar (incluyendo intentos fallidos), `P(quemar)` y el valor por unidad de tiempo, todos condicionados a absorción
+- **WHEN** se corre el simulador con horizonte suficiente (fracción sin absorber baja)
+- **THEN** devuelve días esperados hasta pasar (incluyendo intentos fallidos), `P(quemar)` y la probabilidad condicional a absorción, sin un número de valor económico
 
 #### Scenario: P(quemar) crece con el apalancamiento
 - **WHEN** se compara `P(quemar la cuenta fondeada)` a mayor y menor apalancamiento sobre la misma estrategia
@@ -58,7 +57,7 @@ El sistema SHALL estimar los días esperados hasta pasar, la probabilidad de que
 
 #### Scenario: Horizonte insuficiente no produce un número engañoso
 - **WHEN** una fase deja una fracción SIN ABSORBER por encima del umbral
-- **THEN** el sistema marca "horizonte insuficiente" y no reporta un valor económico numérico para esa configuración
+- **THEN** el sistema marca "horizonte insuficiente" y tanto los días esperados como el valor económico son `nan` (no un número sesgado)
 
 ### Requirement: Contabilidad de tres resultados
 
@@ -90,28 +89,23 @@ El sistema SHALL garantizar que ninguna métrica reportada —probabilidad de de
 
 ### Requirement: Curva de probabilidad frente a apalancamiento
 
-El sistema SHALL reportar SIEMPRE dos curvas diagnósticas vs apalancamiento: la probabilidad de pasar **condicional a absorción** (monótona decreciente en el apalancamiento con horizonte honesto — la tesis §2.1) y el valor por unidad de tiempo (provisional). El sistema SHALL NOT colapsar ninguna de las dos en un único `optimal_leverage` en este estado: sobre `P(pasar)` sola el óptimo es un mínimo degenerado, y el objetivo de valor no está definido hasta modelar la fase fondeada. `optimal_leverage` SHALL devolver `None` con un motivo explícito hasta entonces.
+El sistema SHALL reportar la curva de probabilidad de pasar **condicional a absorción** vs apalancamiento (monótona decreciente con horizonte honesto — la tesis §2.1) y opcionalmente la de `P(quemar)`. El sistema SHALL NOT reportar una curva de valor económico mal especificada ni colapsar a un único `optimal_leverage`: `optimal_leverage` SHALL ser `None` con un motivo explícito hasta que el objetivo de decisión esté definido.
 
-**DECISIÓN (sem 6):** `optimal_leverage = None` hasta que la fase fondeada esté modelada. Alternativas rechazadas y por qué:
-- `argmax P(pasar)` → mínimo degenerado (§2.1).
-- `min k factible` (menor apalancamiento que pasa el guard) → `horizon_days` y `leverage_min` se vuelven perillas ocultas; a horizonte creciente converge al mínimo del grid.
-- growth-optimal / log-utility → ignora que el drawdown es una barrera absorbente; sobre-apalanca sistemáticamente.
+**OBJETIVO COMPROMETIDO (sem 9-10) — objetivo UMBRAL:** el objetivo de decisión NO es maximizar valor esperado (que con dinero de la casa premia apalancar al máximo), sino un problema de umbral alineado con §1.2: `maximizar P(ingreso mensual ≥ $2500 sostenido durante 24 meses)`. Es un problema de barrera con óptimo interior natural (apalancar de más falla el umbral por quema; de menos, por payouts insuficientes) y hace endógeno el número de cuentas a escalar (decisión sem 11). Respaldo mínimo: `max valor/año s.a. P(quemar) ≤ umbral`.
 
-**OBJETIVO COMPROMETIDO (sem 9-10):** valor esperado por unidad de tiempo, con `payout` por ciclo **endógeno** al apalancamiento (derivado de simular la fase fondeada). El óptimo interior emerge del tira y afloja real (ingreso que crece con `k` vs. probabilidad de quema que crece más rápido), sin perillas inventadas.
-
-**INVARIANTE:** una vez definido el objetivo, si el óptimo cae en un borde del grid, el objetivo está mal especificado → error, no resultado.
+**INVARIANTE (test es tarea de sem 9-10):** una vez definido el objetivo, si el óptimo cae en un borde del grid, el objetivo está mal especificado → error. Este test NO puede existir mientras `optimal_leverage` sea `None` (está vacío por construcción); NO se considera cerrado.
 
 #### Scenario: P(pasar) crece al bajar el apalancamiento
 - **WHEN** se calcula la curva de probabilidad condicional a absorción vs apalancamiento sobre una estrategia con deriva positiva y horizonte honesto
 - **THEN** la probabilidad es mayor a menor apalancamiento (tendencia monótona decreciente en el apalancamiento)
 
 #### Scenario: El apalancamiento de decisión sale del valor económico
-- **WHEN** se consulta `optimal_leverage` antes de que la fase fondeada esté modelada (estado actual)
-- **THEN** devuelve `None` con un motivo explícito, y se reportan ambas curvas diagnósticas; NO se colapsa a un número que una perilla de modelado determinaría
+- **WHEN** se consulta `optimal_leverage` antes de que el objetivo umbral esté definido (estado actual)
+- **THEN** devuelve `None` con un motivo explícito, y NO se reporta una curva de valor económico mal especificada
 
 #### Scenario: El óptimo no es el apalancamiento máximo
-- **WHEN** el objetivo de decisión (una vez definido, sem 9-10) produce un óptimo pegado a un borde del grid (mínimo o máximo)
-- **THEN** se trata como una mala especificación del objetivo (error), no como un resultado válido
+- **WHEN** el objetivo umbral (una vez definido, sem 9-10) produce un óptimo pegado a un borde del grid
+- **THEN** se trata como una mala especificación del objetivo (error), no como un resultado válido; su test es tarea de esa fase
 
 ### Requirement: Verificación contra la solución analítica cerrada
 
