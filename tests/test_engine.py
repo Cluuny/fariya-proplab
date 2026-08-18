@@ -112,3 +112,26 @@ def test_swap_scales_with_days_held():
     # Sin retorno ni turnover tras la entrada: la pérdida es puro swap diario.
     assert net.iloc[1:].sum() < 0                       # swap acumula (negativo)
     assert np.allclose(net.iloc[2:].to_numpy(), -0.001) # -swap por día mantenido
+
+
+def test_rolling_vol_is_gap_safe_for_indices():
+    # Un índice con huecos (no cotiza días que el FX sí) NO debe tener la vol
+    # deflactada por los ceros de ffill. Estimada sobre sus días propios.
+    dates = pd.bdate_range("2020-01-01", periods=400)
+    rng = np.random.default_rng(3)
+    fx = 100 * np.cumprod(1 + rng.normal(0, 0.006, 400))     # FX cotiza todos los días
+    idx = 100 * np.cumprod(1 + rng.normal(0, 0.02, 400))     # índice más volátil
+    prices = pd.DataFrame({"FX": fx, "IDX": idx}, index=dates)
+    # El índice no cotiza ~30% de los días (huecos como en la unión real).
+    gap = rng.random(400) < 0.30
+    prices.loc[prices.index[gap], "IDX"] = np.nan
+
+    rv = engine.rolling_vol(prices, window=63)
+    # vol propia del índice (días de cotización) como referencia
+    own = prices["IDX"].dropna().pct_change().rolling(63).std().iloc[-1] * np.sqrt(
+        engine.bars_per_year(prices["IDX"].dropna().pct_change()))
+    # vol ingenua con ceros de ffill (deflactada)
+    naive = engine._asset_returns(prices)["IDX"].rolling(63).std().iloc[-1] * np.sqrt(252)
+
+    assert np.isclose(rv["IDX"].iloc[-1], own, rtol=0.02)   # gap-safe ≈ vol propia
+    assert naive < own                                      # la ingenua deflacta (sesgo direccional)
