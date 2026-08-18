@@ -120,16 +120,19 @@ SHARPE_REFERENCE = SharpeReference(
     value=0.80,
     window="2011-09-19 to 2026-08-14",
     source=(
-        "Window-matched price-return anchor over the exact data window "
-        "(2011-09-19 → 2026-08-14): price CAGR 13.3%/yr, realized vol 16.9% → Sharpe "
-        "≈0.79; engine.sharpe (arithmetic mean) gives 0.82. Corroboration of the level: "
-        "the SPX500 series starts at 1204.1 on 2011-09-19, consistent with the public "
-        "record — Wikipedia 'Closing milestones of the S&P 500' has the index ~1200 in "
-        "mid-Sep 2011, falling below 1100 by 2011-10-04 (consulted 2026-08-18). CAVEAT: "
-        "a precise independent daily close could NOT be fetched in-session (Stooq CSV "
-        "returned empty; FRED keeps only 10y of daily) — record a Stooq/Yahoo ^SPX "
-        "daily close with its consult date to fully close the external check. "
-        "Price-return (the CFD pays no dividends), not total-return."
+        "WHAT IS ACTUALLY VERIFIED (name it precisely): the EXTERNAL check is that the "
+        "series IS the S&P price index — its start level (1204.1 on 2011-09-19) matches "
+        "the public record (Wikipedia 'Closing milestones of the S&P 500': index ~1200 "
+        "mid-Sep 2011, <1100 by 2011-10-04; consulted 2026-08-18). IF the series is the "
+        "index, its Sharpe IS the index's Sharpe BY CONSTRUCTION — this is NOT a "
+        "comparison against a published figure/paper. The 0.80 (geometric: CAGR 13.3% / "
+        "vol 16.9%) vs 0.82 (engine.sharpe, arithmetic mean) agreement is an INTERNAL "
+        "cross-check between two estimators on the same series, not external. "
+        "Price-return (the CFD pays no dividends), not total-return. PENDING to fully "
+        "close: (a) verify the END endpoint (2026-08-14 = 7780.0) against the public "
+        "S&P close, and (b) record a precise independent daily close (Stooq/Yahoo ^SPX) "
+        "with its consult date — neither could be fetched in-session (Stooq CSV empty; "
+        "FRED keeps only 10y of daily)."
     ),
     tolerance=0.10,
 )

@@ -100,6 +100,29 @@ def bars_per_year(returns: pd.Series) -> float:
     return len(idx) / years if years > 0 else float(config.TRADING_DAYS_PER_YEAR)
 
 
+def rolling_vol(
+    prices: pd.DataFrame, window: int = 63, *, periods_per_year: float | None = None
+) -> pd.DataFrame:
+    """Annualized rolling volatility per instrument — GAP-SAFE.
+
+    Estimates each instrument's vol on its OWN trading days (drops the calendar
+    gaps, NOT the zero returns that `_asset_returns` injects by forward-filling).
+    Otherwise, on a combined (union) frame an index has a zero return on every day
+    an FX pair traded but it did not, which deflates its estimated vol ~20% and
+    would systematically OVERSIZE indices in inverse-vol sizing — the same
+    absorbing-barrier trap as the Sunday bars. Each series is annualized with its
+    OWN bars/year, then reindexed (ffill) to the input frame for alignment.
+
+    NOTE for inverse-vol sizing (H001): use THIS, not the vol of `_asset_returns`.
+    """
+    out = {}
+    for col in prices.columns:
+        r = prices[col].dropna().pct_change()
+        ann = np.sqrt(bars_per_year(r) if periods_per_year is None else periods_per_year)
+        out[col] = (r.rolling(window).std() * ann).reindex(prices.index).ffill()
+    return pd.DataFrame(out, index=prices.index)
+
+
 def sharpe(returns: pd.Series, *, periods_per_year: float | None = None) -> float:
     """Annualized Sharpe (risk-free rate = 0).
 
