@@ -182,9 +182,48 @@ FALSADOR: >
 
 # --- GESTIÓN DE COLA ---
 score_prioridad: null            # se asigna con el score §5.1 al entrar en cola de tests
-estado: pre_registrado
-intentos_realizados: 0
-fecha_test: null
+estado: muerta                   # FALSADA en ambas muestras sobre la especificación primaria
+intentos_realizados: 2           # 12m × 2 muestras; el chequeo de robustez NO se disparó
+fecha_test: 2026-08-18
+
+# --- RESULTADO (registro post-ejecución; NO se toca FALSADOR/metrica_exito/
+#     resultado_esperado, congelados) ---
+resultado:
+  runner: scripts/run_h001.py
+  especificacion_primaria_swap_bp: 0.3
+  sharpe_neto:            # por muestra × swap (bp/día)
+    muestra_A:            # FX+oro, eval desde 2004-06-01, lookback 12m
+      "0.0": 0.229
+      "0.3": 0.078        # PRIMARIA
+      "1.0": -0.275
+    muestra_B:            # los 9, eval desde 2015-01-01, lookback 12m
+      "0.0": 0.292
+      "0.3": 0.135        # PRIMARIA
+      "1.0": -0.231
+  zona_marginal_disparada: false   # ninguna primaria cayó en [0.2, 0.4]; ambas < 0.2
+  deflated_sharpe: null            # no aplica (no hubo chequeo de robustez)
+veredicto:
+  muestra_A: muerta      # 0.078 < 0.2 (falsador)
+  muestra_B: muerta      # 0.135 < 0.2 (falsador)
+  global: muerta
+  vs_expectativa: >
+    Por DEBAJO de la expectativa comprometida (~0.40, rango [0.25, 0.60]): incluso
+    el Sharpe BRUTO (swap 0.0) queda en 0.23-0.29, al borde inferior del rango; el
+    swap primario (0.3 bp) lo hunde bajo el falsador. El costo (swap sobre |peso|
+    diario) es el factor decisivo, tal como preveía resultado_esperado.
+  regla_dos_muestras: >
+    NO se activa la degradación post-2010: A (0.078) y B (0.135) están ambas
+    muertas y B (moderna) no es peor que A (con 2008). El efecto es débil en TODO
+    el panel, no específicamente post-2010.
+  sensibilidad_swap: >
+    HONESTO: el veredicto del FALSADOR es sensible al placeholder de swap — a 0.0
+    bp ambas serían MARGINALES (0.229/0.292 ≥ 0.2), no falsadas. PERO ninguna
+    alcanza el umbral de éxito (0.4) bajo NINGÚN swap del rango → H001 no promueve
+    en ningún caso. El veredicto de muerte se dicta sobre la primaria (0.3).
+  accion: >
+    H001 muerta, SIN variantes (falsador). No se reintenta. Queda como referencia
+    de que TSMOM naive sobre panel spot/CFD de 9 instrumentos, neto de swap
+    realista, no sobrevive — consistente con la degradación post-2010 documentada.
 enmiendas:
   # La ficha se puede fortalecer SÓLO mientras nada se haya ejecutado. Tras el
   # primer test (fecha_test != null) el falsador y resultado_esperado se CONGELAN.
