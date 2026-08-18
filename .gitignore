@@ -1,4 +1,7 @@
-# Datos derivados y resultados (regenerables) — data/raw/ NO se ignora (inmutable)
+# Datos crudos y derivados. data/raw/ se ignora: los CSV son re-descargables con
+# la receta de data/README.md; la inmutabilidad (no mutar raw) se respeta igual.
+/data/raw/*
+!/data/raw/.gitkeep
 /data/clean/*
 !/data/clean/.gitkeep
 /results/*
