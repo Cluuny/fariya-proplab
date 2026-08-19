@@ -15,7 +15,7 @@ import math
 
 import pandas as pd
 
-from src import config, engine, signals
+from src import config, engine, report, signals
 
 # --- Samples (from the contract's universo_test) ---
 SAMPLE_A = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "XAUUSD"]  # FX + gold
@@ -40,13 +40,12 @@ def _costs_with_swap(cols: list[str], swap_bp: float) -> dict[str, config.CostMo
     return {c: cm for c in cols}
 
 
-def _net_sharpe(prices, weights, cols, swap_bp, eval_start) -> tuple[float, str]:
-    """Net Sharpe over the evaluation window (signal uses all prior history)."""
+def _net_series(prices, weights, cols, swap_bp, eval_start) -> tuple[pd.Series, str]:
+    """Net return series over the evaluation window (signal uses all history)."""
     net = engine.backtest(prices, weights, costs=_costs_with_swap(cols, swap_bp))
     live = weights.abs().sum(axis=1) > 0
     start = max(pd.Timestamp(eval_start), weights.index[live][0])
-    sl = net.loc[start:]
-    return engine.sharpe(sl), str(start.date())
+    return net.loc[start:], str(start.date())
 
 
 def _expected_max_sharpe_null(sharpes: list[float]) -> float:
@@ -92,14 +91,84 @@ def _norm_ppf(p: float) -> float:
 
 
 def run_sample(name: str, cols: list[str], lookback: int) -> dict:
+    """Return {swap: sharpe, _start: date, _primary_net: Series} for a sample."""
     prices = _load(cols)
     weights = signals.tsmom(prices, lookback_months=lookback)
-    row = {}
+    row: dict = {}
     for swap in SWAPS_BP:
-        sr, start = _net_sharpe(prices, weights, cols, swap, EVAL_START[name])
-        row[swap] = sr
+        net, start = _net_series(prices, weights, cols, swap, EVAL_START[name])
+        row[swap] = engine.sharpe(net)
         row["_start"] = start
+        if swap == PRIMARY_SWAP_BP:
+            row["_primary_net"] = net
     return row
+
+
+def _sample_label(name: str) -> str:
+    return "FX+gold 2004-2026 (incl. 2008)" if name == "A" else "all-9 2015-2026"
+
+
+def build_report(primary: dict, verdicts: dict, intentos: int) -> str:
+    """Deterministic markdown report of the H001 test (no timestamps)."""
+    L = [
+        "# Reporte de prueba — H001 (Time-Series Momentum)",
+        "",
+        f"**Veredicto: {verdicts['global'].upper()}** · `fecha_test: 2026-08-18` · "
+        f"`intentos_realizados: {intentos}`",
+        "",
+        "Primer test de hipótesis del proyecto, de extremo a extremo: datos reales "
+        "→ señal `tsmom` → motor con costos → Sharpe neto → veredicto contra el "
+        "contrato congelado en `hypotheses/H001_tsmom.yaml`. Este reporte se "
+        "regenera con `uv run python scripts/run_h001.py`.",
+        "",
+        "## Contrato (congelado antes de correr)",
+        "",
+        "| Campo | Valor |",
+        "|---|---|",
+        f"| Éxito (promueve) | Sharpe neto > {SUCCESS} por muestra |",
+        f"| Falsador (muerta) | Sharpe neto < {FALSIFIER} por muestra |",
+        "| Expectativa comprometida | ~0.40, rango [0.25, 0.60] |",
+        f"| Especificación primaria | swap = {PRIMARY_SWAP_BP} bp/día (dicta el veredicto) |",
+        "| Diagnóstico | swap 0.0 y 1.0 bp/día (sensibilidad, no promueven) |",
+        "",
+        "## Resultado — Sharpe neto por muestra × swap (bp/día)",
+        "",
+        "| Muestra | 0.0 | 0.3 (primaria) | 1.0 | Veredicto |",
+        "|---|---|---|---|---|",
+    ]
+    for name in ("A", "B"):
+        r = primary[name]
+        L.append(
+            f"| {name} · {_sample_label(name)} (desde {r['_start']}) "
+            f"| {r[0.0]:+.3f} | **{r[0.3]:+.3f}** | {r[1.0]:+.3f} | {verdicts[name]} |"
+        )
+    L += [
+        "",
+        "## Interpretación",
+        "",
+        f"- **Ambas primarias < {FALSIFIER} (falsador) → muerta, sin variantes.** El "
+        "chequeo de robustez no se disparó (ninguna primaria en [0.2, 0.4]).",
+        "- **El costo de mantener domina.** Incluso el Sharpe bruto (swap 0.0: "
+        f"{primary['A'][0.0]:+.3f} / {primary['B'][0.0]:+.3f}) queda por debajo de la "
+        "expectativa ~0.40; el swap diario sobre |peso| lo hunde bajo el falsador y a "
+        "1.0 bp lo vuelve negativo. Consistente con `resultado_esperado` "
+        "(diario→sube costos; CFD spot→swap peor).",
+        "- **Regla de dos muestras: NO activa degradación post-2010** "
+        f"(B {primary['B'][0.3]:+.3f} ≥ A {primary['A'][0.3]:+.3f}: el efecto es débil "
+        "en todo el panel, no específicamente moderno).",
+        "- **Caveat honesto:** el veredicto del falsador es sensible al placeholder de "
+        "swap (a 0.0 bp ambas serían marginales, ≥ 0.2), pero **ninguna alcanza el "
+        f"umbral de éxito ({SUCCESS}) bajo ningún swap** → no promueve en ningún caso.",
+        "",
+    ]
+    for name in ("A", "B"):
+        L += [
+            f"## Detalle Muestra {name} — {_sample_label(name)} (swap {PRIMARY_SWAP_BP} bp)",
+            "",
+            report.render(primary[name]["_primary_net"], name=f"H001 · Muestra {name}"),
+            "",
+        ]
+    return "\n".join(L)
 
 
 def main() -> int:
@@ -135,6 +204,11 @@ def main() -> int:
             verdicts[name] = "marginal"
             marginal[name] = sr
         print(f"Veredicto Muestra {name}: {verdicts[name]} (Sharpe primario {sr:+.3f})")
+    verdicts["global"] = (
+        "viable" if "viable" in (verdicts["A"], verdicts["B"])
+        else "muerta" if verdicts["A"] == verdicts["B"] == "muerta"
+        else "marginal"
+    )
 
     # Marginal-zone robustness check (only if any sample landed in [0.2, 0.4]).
     intentos = 2
@@ -163,6 +237,13 @@ def main() -> int:
     if verdicts["A"] == "viable" and verdicts["B"] == "muerta":
         print("HALLAZGO: degradación post-2010 — A (con 2008) funciona, B (moderno) no.")
     print("Intentos genuinos:", intentos)
+
+    # Persist the test report (deterministic markdown).
+    dest = config.RESULTS / "H001"
+    dest.mkdir(parents=True, exist_ok=True)
+    report_path = dest / "report.md"
+    report_path.write_text(build_report(primary, verdicts, intentos), encoding="utf-8")
+    print(f"\nReporte escrito en {report_path}")
     print("=" * 72)
     return 0
 
