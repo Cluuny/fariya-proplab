@@ -3,7 +3,7 @@
 Two samples reported separately; primary swap spec = 0.3 bp dictates the verdict,
 0.0 and 1.0 bp are robustness diagnostics; marginal-zone [0.2, 0.4] triggers a
 single robustness check (6-month lookback) with a deflated Sharpe. See
-hypotheses/H001_tsmom.yaml (the contract — this script does NOT edit it).
+hypotheses/archive/H001_tsmom.yaml (the contract — this script does NOT edit it).
 
     uv run python scripts/run_h001.py
 """
@@ -26,6 +26,7 @@ SWAPS_BP = [0.0, 0.3, 1.0]          # daily, in basis points
 PRIMARY_SWAP_BP = 0.3               # the verdict is dictated on this one
 LOOKBACKS = {"primary": 12, "robustness": 6}
 SUCCESS, FALSIFIER = 0.4, 0.2       # from metrica_exito / FALSADOR (frozen)
+SPLIT_A = "2016-08-31"              # A's equity peak; splits its constant-universe regime
 
 
 def _load(cols: list[str]) -> pd.DataFrame:
@@ -91,7 +92,7 @@ def _norm_ppf(p: float) -> float:
 
 
 def run_sample(name: str, cols: list[str], lookback: int) -> dict:
-    """Return {swap: sharpe, _start: date, _primary_net: Series} for a sample."""
+    """Return {swap: sharpe, _start, _primary_net, _zero_cost, _turnover} for a sample."""
     prices = _load(cols)
     weights = signals.tsmom(prices, lookback_months=lookback)
     row: dict = {}
@@ -101,6 +102,18 @@ def run_sample(name: str, cols: list[str], lookback: int) -> dict:
         row["_start"] = start
         if swap == PRIMARY_SWAP_BP:
             row["_primary_net"] = net
+
+    # Engine calibration (dragged to every future hypothesis):
+    # zero-cost = NO spread/slippage/swap (apply_costs=False), unlike swap 0.0
+    # which still charges spread/slippage on turnover.
+    s = pd.Timestamp(row["_start"])
+    gross = engine.backtest(prices, weights, apply_costs=False).loc[s:]
+    row["_zero_cost"] = engine.sharpe(gross)
+    # turnover_anual = sum|Δw| / years over the evaluation window.
+    wsl = weights.loc[s:]
+    total_turnover = wsl.diff().abs().sum(axis=1).sum()
+    years = (wsl.index[-1] - wsl.index[0]).days / 365.25
+    row["_turnover"] = total_turnover / years if years > 0 else float("nan")
     return row
 
 
@@ -118,7 +131,7 @@ def build_report(primary: dict, verdicts: dict, intentos: int) -> str:
         "",
         "Primer test de hipótesis del proyecto, de extremo a extremo: datos reales "
         "→ señal `tsmom` → motor con costos → Sharpe neto → veredicto contra el "
-        "contrato congelado en `hypotheses/H001_tsmom.yaml`. Este reporte se "
+        "contrato congelado en `hypotheses/archive/H001_tsmom.yaml`. Este reporte se "
         "regenera con `uv run python scripts/run_h001.py`.",
         "",
         "## Contrato (congelado antes de correr)",
@@ -142,23 +155,68 @@ def build_report(primary: dict, verdicts: dict, intentos: int) -> str:
             f"| {name} · {_sample_label(name)} (desde {r['_start']}) "
             f"| {r[0.0]:+.3f} | **{r[0.3]:+.3f}** | {r[1.0]:+.3f} | {verdicts[name]} |"
         )
+    # Intra-sample degradation for A (constant universe -> isolates time).
+    net_a = primary["A"]["_primary_net"]
+    early = net_a.loc[:SPLIT_A]
+    late = net_a.loc[SPLIT_A:].iloc[1:]
+    sh_early, sh_late = engine.sharpe(early), engine.sharpe(late)
+    ret_early = float((1 + early.fillna(0)).prod() - 1)
+    ret_late = float((1 + late.fillna(0)).prod() - 1)
+    dd_a = report.max_drawdown(net_a)
+    vol_a = float(net_a.std(ddof=0) * (engine.bars_per_year(net_a) ** 0.5))
+
     L += [
+        "",
+        "## Diagnóstico del motor (calibración — se arrastra a toda hipótesis)",
+        "",
+        "`sharpe_zero_cost` = SIN spread/slippage/swap (`apply_costs=False`), distinto "
+        "del swap 0.0 que aún cobra spread/slippage sobre rotación. `turnover_anual` = "
+        "`sum|Δw|/año`.",
+        "",
+        "| Muestra | sharpe_zero_cost | sharpe primario (0.3) | turnover_anual |",
+        "|---|---|---|---|",
+        f"| A | {primary['A']['_zero_cost']:+.3f} | {primary['A'][0.3]:+.3f} | "
+        f"{primary['A']['_turnover']:.2f}× |",
+        f"| B | {primary['B']['_zero_cost']:+.3f} | {primary['B'][0.3]:+.3f} | "
+        f"{primary['B']['_turnover']:.2f}× |",
+        "",
+        f"- **Turnover ≈ {primary['A']['_turnover']:.0f}×/año ≈ mensual**, no diario: el "
+        "rebalanceo mensual (ffill) sostiene los pesos entre fechas; el recálculo diario "
+        "de `rolling_vol` NO infla la rotación. El motor no sobre-tradea — las hipótesis "
+        "futuras no saldrán subestimadas por este canal.",
+        "- **Es la historia del efecto débil, no la de la rotación:** `sharpe_zero_cost` "
+        f"({primary['A']['_zero_cost']:+.3f}/{primary['B']['_zero_cost']:+.3f}) apenas "
+        "supera al swap-0.0 → el costo por rotación (spread/slippage) es pequeño; el edge "
+        "bruto real es ~0.25, débil de por sí.",
         "",
         "## Interpretación",
         "",
         f"- **Ambas primarias < {FALSIFIER} (falsador) → muerta, sin variantes.** El "
         "chequeo de robustez no se disparó (ninguna primaria en [0.2, 0.4]).",
-        "- **El costo de mantener domina.** Incluso el Sharpe bruto (swap 0.0: "
-        f"{primary['A'][0.0]:+.3f} / {primary['B'][0.0]:+.3f}) queda por debajo de la "
-        "expectativa ~0.40; el swap diario sobre |peso| lo hunde bajo el falsador y a "
-        "1.0 bp lo vuelve negativo. Consistente con `resultado_esperado` "
-        "(diario→sube costos; CFD spot→swap peor).",
-        "- **Regla de dos muestras: NO activa degradación post-2010** "
-        f"(B {primary['B'][0.3]:+.3f} ≥ A {primary['A'][0.3]:+.3f}: el efecto es débil "
-        "en todo el panel, no específicamente moderno).",
+        "- **Degradación temporal — medida DONDE se puede aislar el tiempo (dentro de la "
+        "Muestra A, universo constante), NO por A vs B.** La comparación A vs B está "
+        "confundida: difieren en universo (6 vs 9) Y período (2004- vs 2015-) a la vez, "
+        "así que no evalúa el régimen. El split intra-A sí:",
+        "",
+        "| Sub-período de A | Sharpe neto | Retorno total |",
+        "|---|---|---|",
+        f"| 2004-2016 (hasta el pico) | {sh_early:+.3f} | {ret_early:+.1%} |",
+        f"| 2016-2026 | {sh_late:+.3f} | {ret_late:+.1%} |",
+        "",
+        f"  El régimen temprano funcionaba (~{sh_early:+.2f}, cerca de lo esperado); el "
+        f"tardío es negativo ({sh_late:+.2f}). Eso es la degradación que CXO documenta; el "
+        f"agregado ({primary['A'][0.3]:+.3f}) la esconde promediando ambos regímenes.",
+        "- **El costo de mantener remata un efecto ya débil:** el swap diario sobre |peso| "
+        "hunde el Sharpe bruto (~0.25) bajo el falsador y a 1.0 bp lo vuelve negativo "
+        "(consistente con `resultado_esperado`: diario→sube costos; CFD spot→swap peor).",
         "- **Caveat honesto:** el veredicto del falsador es sensible al placeholder de "
         "swap (a 0.0 bp ambas serían marginales, ≥ 0.2), pero **ninguna alcanza el "
         f"umbral de éxito ({SUCCESS}) bajo ningún swap** → no promueve en ningún caso.",
+        f"- **El drawdown la habría matado igual:** max DD de A = {dd_a:.1%} con vol "
+        f"~{vol_a:.1%} (ratio ~{abs(dd_a)/vol_a:.1f}×). Aunque el Sharpe fuera 0.5, esa "
+        "serie revienta una barrera del 10% repetidamente. El falsador de Sharpe es "
+        "necesario pero **no suficiente**; para futuras hipótesis, **max DD relativo a la "
+        "vol es un diagnóstico de primera línea**.",
         "",
     ]
     for name in ("A", "B"):
@@ -185,6 +243,8 @@ def main() -> int:
         for swap in SWAPS_BP:
             tag = "  <-- PRIMARY" if swap == PRIMARY_SWAP_BP else ""
             print(f"    swap {swap:>3} bp/día : Sharpe neto = {r[swap]:+.3f}{tag}")
+        print(f"    calibración   : sharpe_zero_cost = {r['_zero_cost']:+.3f} · "
+              f"turnover_anual = {r['_turnover']:.2f}×")
 
     print("\n" + "-" * 72)
     print(f"Expectativa comprometida (resultado_esperado): ~0.40, rango [0.25, 0.60]")

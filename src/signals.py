@@ -99,7 +99,7 @@ def tsmom(
     Ex-ante scaling resolves in ONE step (no convergence loop): build the
     UNSCALED inverse-vol portfolio return, estimate its rolling vol shifted one
     day (only info up to t-1), and divide the target by it. See
-    hypotheses/H001_tsmom.yaml (frozen contract).
+    hypotheses/archive/H001_tsmom.yaml (frozen contract; H001 falsified/archived).
     """
     if prices.shape[1] == 0:
         return pd.DataFrame(index=prices.index.copy())
