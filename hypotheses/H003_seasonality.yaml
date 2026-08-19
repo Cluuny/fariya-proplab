@@ -1,0 +1,160 @@
+# =============================================================================
+# H003 — Estacionalidad: Turn-of-the-Month (TOM) en índices de renta variable
+# Ficha de PRE-REGISTRO (protocolo anti-autoengaño §3.5/§3.6/§7.1).
+# El FALSADOR y la regla testeable se escriben ANTES de correr nada. No se editan
+# cuando aparezca un resultado que guste. La señal se implementa en un change
+# aparte, contra este contrato.
+#
+# Familia 3 del listado del documento maestro (§2.5): "Estacionalidad y efectos
+# de calendario", mecanismo "flujos institucionales, restricciones de mandato".
+# =============================================================================
+
+id: H003
+
+fuente:
+  tipo: paper
+  cita: "Ariel (1987), A monthly effect in stock returns, JFE; McConnell & Xu (2008), Equity returns at the turn of the month, Financial Analysts Journal"
+  url: "https://www.jstor.org/stable/2330973"
+  fecha_publicacion: 2008
+
+# --- CLASIFICACIÓN ---
+familia: seasonality
+mecanismo: institucional          # flujos de mandato (§2.5, familia 3)
+explicacion_economica: >
+  El retorno de los índices de renta variable se concentra en la ventana de
+  cambio de mes. Motor (filtro 4, "quién está del otro lado"): flujos de caja
+  institucionales concentrados a fin/inicio de mes —sueldos, aportes de pensión,
+  rebalanceo por mandato, window dressing— son compradores price-insensitive que
+  crean presión predecible. Contraparte: proveedores de liquidez que absorben el
+  flujo y cobran por hacerlo; el que se posiciona largo en la ventana monta el
+  flujo. Es un efecto institucional-EQUITY: no aplica limpio a FX/oro.
+estructura: seasonality
+direccionalidad: long_only        # drift alcista concentrado; shortear fuera de ventana pierde con el drift secular
+
+# --- OPERABILIDAD ---
+# ADAPTACIÓN: universo de 3 índices (no un mercado amplio). Correlacionados
+# 0.5-0.7 → breadth efectiva ~2 → techo de Sharpe bajo (ver resultado_esperado).
+# NO se añade FX para ganar breadth: rompería el filtro 4 (el mecanismo es equity).
+instrumentos: [SPX500, GER40, JPN225]
+n_instrumentos: 3
+frecuencia_datos: diaria
+horizonte_holding_dias: 4         # la ventana TOM [-1, +3]; flat el resto del mes
+datos_requeridos: [precio_ohlc]   # + calendario (ya lo tenemos)
+costo_datos_usd_mes: 0
+operable_en_prop: true            # long-only índices, swing, turnover MUY bajo
+razon_si_no: null
+
+# --- RESULTADO ORIGINAL ---
+periodo_original: "Ariel 1963-1981; McConnell-Xu 1926-2005 (y OOS internacional)"
+sharpe_reportado: null            # los papers reportan CONCENTRACIÓN del retorno en la ventana, no un Sharpe limpio
+efecto_reportado: >
+  Prácticamente TODO el retorno positivo del mercado accionario ocurre en la
+  ventana [-1, +3]; el resto del mes es ~plano. NO es nuestro listón (efecto
+  documentado como atenuado post-2000).
+max_dd_reportado: null
+costos_incluidos: false           # los papers académicos no netean costos de trading
+
+# --- EVIDENCIA EXTERNA ---
+veredicto_externo: confirmado_con_atenuacion
+replicaciones_encontradas:
+  - "McConnell & Xu (2008): confirma 1926-2005 y en 30+ mercados internacionales"
+  - "Estudios post-2000: atenuación del efecto en mercados desarrollados líquidos"
+
+# --- HIPÓTESIS TESTEABLE ---
+hipotesis: >
+  El retorno de los índices de renta variable se concentra en la ventana de
+  cambio de mes; estar largo SÓLO en [último día hábil del mes, +3 días hábiles]
+  captura la mayor parte del drift con mucha menos exposición (y por tanto menos
+  costo de mantener) que buy-and-hold, en nuestro panel de 3 índices.
+regla_entrada: >
+  Largo en cada índice durante la ventana TOM = [último día hábil del mes previo,
+  hasta el 3er día hábil del mes] (convención [-1, +3] de McConnell-Xu, sobre el
+  calendario propio de cada índice). Flat fuera de la ventana.
+regla_salida: "cerrar al cierre del 3er día hábil del mes → flat hasta el próximo [-1]"
+sizing: >
+  Vol-inversa (engine.rolling_vol, gap-safe) entre los índices activos en la
+  ventana, con escalado GLOBAL ex-ante (escalar rodante, sólo vol observada hasta
+  t-1, sin bucle de convergencia — misma recipe que H001) apuntando a ~8% de vol
+  de PORTAFOLIO. Bruto ≤ config.MAX_GROSS_EXPOSURE (4).
+  CAVEAT: como la estrategia está flat ~81% del tiempo, apuntar a 8% de vol de
+  período completo exige apalancamiento alto EN ventana (probable recorte por
+  max_gross) → la vol efectiva puede quedar por debajo de 8%. No afecta al
+  falsador (Sharpe invariante al escalado); sí al diagnóstico del simulador.
+universo_test:
+  # NO hay muestra pre-2010 (los índices no existen antes de 2011) → el enfoque de
+  # dos muestras de H001 no aplica. El corte correcto es in-sample / holdout.
+  instrumentos: [SPX500, GER40, JPN225]
+  periodo_in_sample: "2011-09 → 2023-08-16"
+  nota: "GER40 arranca 2013-09; contribuye desde entonces. El veredicto se juzga in-sample."
+costos: >
+  A diferencia de H001 (donde el swap diario dominaba), aquí el holding es ~4
+  días/mes → el swap es MÍNIMO; la fricción real es el SPREAD (una entrada + una
+  salida por índice por mes). Turnover bajo por diseño.
+sensibilidad_costos:
+  swap_bp_dia: [0.0, 0.3, 1.0]
+  especificacion_primaria: 0.3   # el veredicto se dicta sobre ésta
+  regla: >
+    Las tres se reportan; el veredicto se dicta con swap=0.3. Aquí el swap casi no
+    mueve la aguja (holding corto); el diagnóstico que importa es spread vs
+    sharpe_zero_cost. Si el veredicto cruzara el falsador dentro del rango, es
+    sobre el placeholder y se declara así.
+holdout: respetado                 # <-- a diferencia de H001 (exento). La política se ejerce desde aquí.
+holdout_detalle: >
+  In-sample: 2011-09 → 2023-08-16 (se desarrolla y se juzga el FALSADOR aquí).
+  Holdout SAGRADO: 2023-08-17 → 2026 (config.HOLDOUT_START), reservado. Se toca UNA
+  sola vez, y sólo si la hipótesis PASA in-sample (Sharpe > 0.4), para confirmar.
+  Razón de NO exención (contra H001): H003 tiene libertad de especificación
+  (nuestro universo de 3 índices CFD, nuestro sizing, elección de ventana), y la
+  política del holdout debe empezar a ejercerse. Ver hypotheses/HOLDOUT.md.
+metrica_exito: >
+  Sharpe NETO in-sample > 0.4 → pasa a CONFIRMACIÓN en el holdout (un solo vistazo).
+  Viable sólo si además se sostiene en el holdout. El Sharpe es invariante al
+  apalancamiento (el veredicto no depende de optimal_leverage, diferido a sem 9-10).
+
+# Expectativa COMPROMETIDA antes de correr (sin esto, un 0.35 se leería como éxito
+# y un 0.15 como "mi universo es delgado" — ambas lecturas post-hoc).
+resultado_esperado:
+  sharpe_central: 0.35
+  rango: [0.15, 0.60]
+  derivacion: >
+    Grinold-Kahn IR ≈ IC·√BR con universo delgado: 3 índices correlacionados
+    0.5-0.7 → breadth efectiva ~2. El efecto TOM está documentado pero ATENUADO
+    post-2000, y nuestra muestra es 2011+ (todo post-atenuación) → central ~0.35,
+    con cola baja realista. Puede quedar por debajo de 0.4.
+  desviaciones:
+    - "3 índices vs mercado amplio → BAJA (breadth ~2)"
+    - "2011-2026 (post-atenuación) vs 1926-2005 → BAJA (efecto decaído)"
+    - "CFD spot vs índice cash → costo ligeramente peor pero turnover MUY bajo → efecto pequeño"
+    - "long-only en ventana de 4 días → holding corto → swap casi nulo (bueno vs H001)"
+zona_marginal:
+  # Mismo criterio que H001: un único chequeo, deflated Sharpe como CRITERIO.
+  rango: [0.2, 0.4]
+  decision: un_chequeo_robustez
+  regla: >
+    Si el Sharpe in-sample cae en [0.2, 0.4], se corre UNA sola variante de ventana
+    pre-especificada —[-1, +4] en vez de [-1, +3]— y se reporta el DEFLATED Sharpe.
+    Ninguna variante más (ni umbrales, ni instrumentos, ni tuneo del sizing).
+  conteo_intentos: >
+    intentos_realizados = 2 si se dispara (2 ventanas × in-sample; la muestra es
+    una sola, in-sample). Las corridas de swap NO cuentan (sensibilidad).
+  regla_decision: >
+    Promueve a confirmación en holdout SÓLO si el deflated Sharpe > 0.4. Si no,
+    estado = parked (nota escrita, cero trabajo adicional; se revisa sólo si el
+    portafolio de la sem 10 la necesita como diversificador).
+FALSADOR: >
+  Si el Sharpe NETO in-sample (2011-09 → 2023-08-16, swap 0.3 bp, universo de los
+  3 índices) < 0.2, H003 se descarta y NO se reintenta con variantes (salvo el
+  único chequeo de zona_marginal si cae en [0.2, 0.4]). El holdout NO se toca si
+  la hipótesis muere in-sample.
+
+# --- DIAGNÓSTICOS DE PRIMERA LÍNEA (lección de H001) ---
+diagnosticos_requeridos:
+  - "turnover_anual = sum|Δw|/año (debe ser bajo por diseño; si es alto, hay un bug de rebalanceo)"
+  - "sharpe_zero_cost (apply_costs=False) — distingue efecto débil de fricción por spread"
+  - "max_dd / vol — el falsador de Sharpe es NECESARIO pero NO SUFICIENTE (H001 tenía DD/vol ~3.5×, revienta barrera del 10% aun con buen Sharpe)"
+
+# --- GESTIÓN DE COLA ---
+score_prioridad: null
+estado: pre_registrado
+intentos_realizados: 0
+fecha_test: null
