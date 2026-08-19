@@ -13,9 +13,13 @@ id: H003
 
 fuente:
   tipo: paper
-  cita: "Ariel (1987), A monthly effect in stock returns, JFE; McConnell & Xu (2008), Equity returns at the turn of the month, Financial Analysts Journal"
-  url: "https://www.jstor.org/stable/2330973"
-  fecha_publicacion: 2008
+  referencias:
+    - cita: "Ariel (1987), A monthly effect in stock returns, Journal of Financial Economics"
+      url: "https://doi.org/10.1016/0304-405X(87)90066-3"
+      fecha_publicacion: 1987
+    - cita: "McConnell & Xu (2008), Equity returns at the turn of the month, Financial Analysts Journal 64(2)"
+      url: "https://doi.org/10.2469/faj.v64.n2.11"
+      fecha_publicacion: 2008
 
 # --- CLASIFICACIÓN ---
 familia: seasonality
@@ -76,10 +80,12 @@ sizing: >
   ventana, con escalado GLOBAL ex-ante (escalar rodante, sólo vol observada hasta
   t-1, sin bucle de convergencia — misma recipe que H001) apuntando a ~8% de vol
   de PORTAFOLIO. Bruto ≤ config.MAX_GROSS_EXPOSURE (4).
-  CAVEAT: como la estrategia está flat ~81% del tiempo, apuntar a 8% de vol de
-  período completo exige apalancamiento alto EN ventana (probable recorte por
-  max_gross) → la vol efectiva puede quedar por debajo de 8%. No afecta al
-  falsador (Sharpe invariante al escalado); sí al diagnóstico del simulador.
+  TRIPWIRE (no es un caveat): con 3 índices a ~17-20% de vol y correlación ~0.6,
+  la cartera vol-inversa está en ~16% full-time (verificado). Para 8% de vol de
+  período completo con 19% de exposición hace falta apalancamiento ~1.15× en
+  ventana — lejísimos del tope de 4. Por tanto NO debe haber recorte por
+  max_gross; si se observa recorte, es señal de BUG en el sizing, no una
+  limitación esperada. (Sharpe invariante al escalado; diagnóstico, no falsador.)
 universo_test:
   # NO hay muestra pre-2010 (los índices no existen antes de 2011) → el enfoque de
   # dos muestras de H001 no aplica. El corte correcto es in-sample / holdout.
@@ -102,50 +108,103 @@ holdout: respetado                 # <-- a diferencia de H001 (exento). La polí
 holdout_detalle: >
   In-sample: 2011-09 → 2023-08-16 (se desarrolla y se juzga el FALSADOR aquí).
   Holdout SAGRADO: 2023-08-17 → 2026 (config.HOLDOUT_START), reservado. Se toca UNA
-  sola vez, y sólo si la hipótesis PASA in-sample (Sharpe > 0.4), para confirmar.
+  sola vez, y sólo si la hipótesis PASA in-sample (existe Y supera el p95 del nulo),
+  para consistencia —no confirmación (SE holdout ~0.59, ver poder_estadistico).
   Razón de NO exención (contra H001): H003 tiene libertad de especificación
   (nuestro universo de 3 índices CFD, nuestro sizing, elección de ventana), y la
   política del holdout debe empezar a ejercerse. Ver hypotheses/HOLDOUT.md.
-metrica_exito: >
-  Sharpe NETO in-sample > 0.4 → pasa a CONFIRMACIÓN en el holdout (un solo vistazo).
-  Viable sólo si además se sostiene en el holdout. El Sharpe es invariante al
-  apalancamiento (el veredicto no depende de optimal_leverage, diferido a sem 9-10).
+# === DOS PREGUNTAS SEPARADAS (la hipótesis y el falsador miden cosas distintas) ===
+# La hipótesis dice que el retorno se CONCENTRA en la ventana. Eso NO es lo mismo
+# que "¿la estrategia negociable gana?", y el test de concentración tiene mucho más
+# poder (usa los ~3000 días de la muestra, no los ~576 expuestos).
 
-# Expectativa COMPROMETIDA antes de correr (sin esto, un 0.35 se leería como éxito
-# y un 0.15 como "mi universo es delgado" — ambas lecturas post-hoc).
+# --- Pregunta 1: ¿EXISTE el efecto? (alto poder) ---
+estadistico_primario:
+  test: >
+    Contraste de medias: retorno diario medio en días TOM vs días no-TOM, por
+    instrumento y agrupado. Error estándar por BLOQUES (block bootstrap, preserva
+    autocorrelación y clustering de vol). Reporta la diferencia en bps/día y su
+    IC 95%.
+  razon: >
+    Es el test de la hipótesis TAL COMO ESTÁ ESCRITA y usa TODA la muestra (~3000
+    días). Es la pregunta de existencia; el Sharpe de la estrategia negociable es
+    la pregunta ECONÓMICA (¿explotable tras costos?) y se reporta aparte.
+  criterio: "diferencia TOM − no-TOM > 0 con IC 95% que no cruza 0"
+
+# --- Pregunta 2: ¿es EXPLOTABLE? (Sharpe neto vs el nulo correcto) ---
+# El benchmark NO es cero. Long-only ~19% del tiempo en índices durante 2011-2023
+# (bull market) ya da Sharpe alto por beta + tiempo en mercado. Verificado con
+# datos reales: un nulo (4 días ALEATORIOS/mes, mismos índices) tiene Sharpe
+# medio ~0.24 y p95 ~0.65. Un Sharpe absoluto de 0.4 está POR DEBAJO del p95 del
+# nulo → no distingue TOM del azar. El Sharpe absoluto NO es falsador.
+benchmark_nulo:
+  descripcion: >
+    Largo en los mismos índices, MISMO sizing (vol-inversa ex-ante), MISMO número
+    de días por mes (4), pero en días hábiles elegidos AL AZAR dentro del mes.
+    1000 remuestreos con semilla fija; se reporta la distribución del Sharpe nulo.
+  proposito: >
+    Aísla el efecto TOM del drift secular + tiempo en mercado. Con 19% de
+    exposición en 2011-2023 el nulo esperado es alto SOLO por beta (medido: media
+    ~0.24, p95 ~0.65 con equal-weight; se recalcula con el sizing real).
+  entrega: "p-valor empírico directo (sin supuesto de normalidad) + p95 del nulo"
+metrica_exito: >
+  H003 es VIABLE sólo si se cumplen LAS DOS: (1) EXISTE — el contraste de medias
+  (estadistico_primario) es positivo con IC 95% que no cruza 0; y (2) EXPLOTABLE —
+  el Sharpe neto in-sample de la ventana TOM SUPERA el p95 del benchmark_nulo. Si
+  pasa ambas in-sample, un solo vistazo al holdout para consistencia. El Sharpe
+  ABSOLUTO es diagnóstico económico, NO criterio de éxito (un nulo lo alcanzaría).
+
+poder_estadistico:
+  # SE(Ŝ) ≈ √((1+S²/2)/T). Sin esto, el ruido obliga a llamar "muerta" o "viva"
+  # a algo que los datos no pueden resolver — peor error que cualquiera de los dos.
+  se_sharpe_in_sample: 0.30      # √((1+0.35²/2)/12) — 12 años
+  se_sharpe_holdout: 0.59        # 3 años — el holdout NO puede confirmar un efecto
+  requisito: >
+    Se reporta el Sharpe CON intervalo de confianza al 95%, no sólo el punto. Un
+    veredicto cuyo IC cruza TANTO 0.2 como 0.4 (o cuyo Sharpe no supera el p95 del
+    nulo pero tampoco lo descarta con claridad) se declara INDETERMINADO
+    (estado = underpowered), NO "muerta" ni "viable".
+  holdout_alcance: >
+    El holdout (3 años, SE ~0.59) sólo puede REFUTAR (colapso claro), no confirmar.
+    Si el Sharpe holdout es positivo y su IC contiene el valor in-sample, se
+    declara "consistente", NUNCA "confirmado".
+
+# Expectativa COMPROMETIDA antes de correr.
 resultado_esperado:
-  sharpe_central: 0.35
-  rango: [0.15, 0.60]
+  sharpe_absoluto_central: 0.35   # DIAGNÓSTICO, no criterio — es casi todo beta
+  exceso_sobre_nulo_esperado: "≈ 0 (pequeño / indistinguible)"
   derivacion: >
-    Grinold-Kahn IR ≈ IC·√BR con universo delgado: 3 índices correlacionados
-    0.5-0.7 → breadth efectiva ~2. El efecto TOM está documentado pero ATENUADO
-    post-2000, y nuestra muestra es 2011+ (todo post-atenuación) → central ~0.35,
-    con cola baja realista. Puede quedar por debajo de 0.4.
+    El Sharpe ABSOLUTO (~0.3-0.5) es generado casi por completo por beta + tiempo
+    en mercado: el nulo (random 4d/mes) ya da ~0.24 de media y ~0.65 en p95. La
+    cantidad que importa es el EXCESO de TOM sobre el nulo, y con el efecto
+    documentado como atenuado post-2000 y una muestra 2011+, la expectativa honesta
+    es que el exceso sea pequeño o indistinguible del azar → resultado más probable
+    = underpowered o muerta (no supera p95). Que "dé 0.35" NO es éxito.
   desviaciones:
-    - "3 índices vs mercado amplio → BAJA (breadth ~2)"
-    - "2011-2026 (post-atenuación) vs 1926-2005 → BAJA (efecto decaído)"
-    - "CFD spot vs índice cash → costo ligeramente peor pero turnover MUY bajo → efecto pequeño"
-    - "long-only en ventana de 4 días → holding corto → swap casi nulo (bueno vs H001)"
+    - "3 índices vs mercado amplio → menos breadth"
+    - "2011-2026 (post-atenuación) vs 1926-2005 → efecto decaído"
+    - "long-only ventana 4 días → holding corto → swap casi nulo (bueno vs H001)"
 zona_marginal:
-  # Mismo criterio que H001: un único chequeo, deflated Sharpe como CRITERIO.
-  rango: [0.2, 0.4]
+  # El 'margen' aquí es relativo al NULO, no a un Sharpe absoluto.
+  criterio: "Sharpe TOM cerca del p95 del nulo, o IC que lo cruza"
   decision: un_chequeo_robustez
   regla: >
-    Si el Sharpe in-sample cae en [0.2, 0.4], se corre UNA sola variante de ventana
-    pre-especificada —[-1, +4] en vez de [-1, +3]— y se reporta el DEFLATED Sharpe.
-    Ninguna variante más (ni umbrales, ni instrumentos, ni tuneo del sizing).
-  conteo_intentos: >
-    intentos_realizados = 2 si se dispara (2 ventanas × in-sample; la muestra es
-    una sola, in-sample). Las corridas de swap NO cuentan (sensibilidad).
+    Si TOM queda ambiguo respecto al p95 del nulo, se corre UNA sola variante de
+    ventana pre-especificada —[-1, +4] en vez de [-1, +3]— y se reporta el DEFLATED
+    Sharpe (y su comparación con el p95 del nulo recomputado). Ninguna variante más.
+  conteo_intentos: "intentos_realizados = 2 si se dispara (2 ventanas × in-sample). Los swaps NO cuentan."
   regla_decision: >
-    Promueve a confirmación en holdout SÓLO si el deflated Sharpe > 0.4. Si no,
-    estado = parked (nota escrita, cero trabajo adicional; se revisa sólo si el
-    portafolio de la sem 10 la necesita como diversificador).
+    Promueve a confirmación en holdout SÓLO si el deflated Sharpe supera el p95 del
+    nulo. Si no, estado = parked o underpowered según el IC.
 FALSADOR: >
-  Si el Sharpe NETO in-sample (2011-09 → 2023-08-16, swap 0.3 bp, universo de los
-  3 índices) < 0.2, H003 se descarta y NO se reintenta con variantes (salvo el
-  único chequeo de zona_marginal si cae en [0.2, 0.4]). El holdout NO se toca si
-  la hipótesis muere in-sample.
+  Si el Sharpe NETO in-sample de la ventana TOM (2011-09 → 2023-08-16, swap 0.3 bp,
+  3 índices) NO supera el percentil 95 de la distribución del benchmark_nulo (mismo
+  nº de días, mismo sizing, ventanas ALEATORIAS), H003 se descarta: el retorno es
+  atribuible a exposición al drift, no a estacionalidad. El Sharpe absoluto es
+  diagnóstico económico, NO falsador. Excepción de poder: si el IC del Sharpe
+  cruza tanto el p95 del nulo como su propio punto de forma que no se puede
+  resolver, el veredicto es 'underpowered' (indeterminado), NO 'muerta'. El
+  holdout NO se toca si la hipótesis muere o queda indeterminada in-sample.
 
 # --- DIAGNÓSTICOS DE PRIMERA LÍNEA (lección de H001) ---
 diagnosticos_requeridos:
@@ -154,7 +213,24 @@ diagnosticos_requeridos:
   - "max_dd / vol — el falsador de Sharpe es NECESARIO pero NO SUFICIENTE (H001 tenía DD/vol ~3.5×, revienta barrera del 10% aun con buen Sharpe)"
 
 # --- GESTIÓN DE COLA ---
+# estados posibles: pre_registrado | testeado | viable | muerta | parked |
+#                   underpowered (indeterminado: los datos no resuelven el veredicto)
 score_prioridad: null
 estado: pre_registrado
 intentos_realizados: 0
 fecha_test: null
+enmiendas:
+  # La ficha se fortalece SÓLO mientras nada se haya ejecutado. Tras el primer
+  # test (fecha_test != null) el falsador y resultado_esperado se CONGELAN.
+  - fecha: 2026-08-18
+    tipo: pre_ejecucion            # intentos_realizados=0, fecha_test=null
+    que: >
+      Rediseño del test tras revisión: (1) el falsador pasa a ser RELATIVO a un
+      benchmark_nulo (mismos días aleatorios) porque long-only ~19% en un bull
+      market da ~0.24-0.65 de Sharpe por puro beta —el Sharpe absoluto no distingue
+      TOM del azar; (2) se separa la pregunta de EXISTENCIA (estadistico_primario,
+      contraste de medias con block bootstrap, alto poder) de la de EXPLOTABILIDAD
+      (Sharpe vs p95 del nulo); (3) poder_estadistico con SE in-sample 0.30 /
+      holdout 0.59 y el nuevo estado 'underpowered'; (4) el caveat de max_gross pasó
+      a tripwire de bug (apalancamiento esperado ~1.15×); (5) cita separada
+      Ariel 1987 / McConnell-Xu 2008.
