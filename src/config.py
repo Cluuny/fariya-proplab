@@ -108,20 +108,82 @@ class CostModel:
     slippage: float = 0.00005       # slippage per side (per rotated unit)
     impact: float = 0.0             # market impact per rotated unit
     commission: float = 0.0         # commission per rotated unit
-    # Swap/carry: a DAILY charge proportional to |weight| HELD (not to turnover).
-    # First-order cost for long-holding strategies like TSMOM (holds for weeks);
-    # without it the backtest reports returns that do not exist. Placeholder
-    # ~0.3 bp/day (0.00003), realistic for a ~1%/yr rate differential (≈0.27
-    # bp/day); calibrate with real broker swap rates per instrument.
-    # KNOWN LIMITATION: this swap is UNSIGNED (always a cost on |weight|), a
-    # conservative approximation for trend (H001). It is a BLOCKER for carry
-    # (H002), where the signed rate differential IS the strategy return.
-    swap: float = 0.00003
+    # --- Swap, now DIRECTIONAL (two separated components, both DAILY on |weight|
+    #     or weight held, not turnover) ---
+    # carry: SIGNED daily rate differential a LONG position earns (+ = long
+    #   receives income, − = long pays). A SHORT earns −carry. In a long/short
+    #   book this partially cancels; it is NOT a cost, it is a P&L term.
+    # swap_margin: the broker's markup, ALWAYS a cost on |weight|/day
+    #   (unidirectional). This is what does not cancel in a balanced book.
+    # Engine applies:  swap_cost = swap_margin·|w_prev| − carry·w_prev.
+    # See SWAP_CALIBRATION below (real published sources, dated).
+    carry: float = 0.0
+    swap_margin: float = 0.00003    # ~0.30 bp/day (afterprime/FTMO published, 2026-08)
 
 
-# Default cost model and per-instrument overrides.
+# =========================================================================== #
+# SWAP CALIBRATION — real published sources, dated (como SHARPE_REFERENCE)     #
+# =========================================================================== #
+# El swap real se separa en (a) diferencial de tasas CON SIGNO y (b) margen del
+# broker unidireccional. Fuentes:
+#  · carry (diferencial): tasas de política publicadas — UniRateAPI, consultado
+#    2026-08-22 (valores con fecha ~2026-03): Fed 4.50, ECB 2.50, BoE 4.50,
+#    BoJ 0.50, RBA 4.10, BoC 2.75, SNB 0.25; HKD ligado a USD (HKMA→Fed).
+#    carry(long XXXYYY) ≈ (r_XXX − r_YYY)/360 por día (convención money-market).
+#    Cruces: aditivo por construcción (carry(EURJPY)=carry(EURUSD)+carry(USDJPY)).
+#    Índices: carry = (div_yield − financing)/360; metales: −financing/360.
+#  · swap_margin: tabla long/short publicada de un broker — afterprime.com/swaps,
+#    consultado 2026-08-23 (p. ej. EURUSD −9.43/+1.31 USD/lote → margen ≈0.35 bp/d;
+#    XAUUSD −70/+29.26 → ≈0.47). El ejemplo de FTMO (prop) da un margen similar
+#    (~0.43 bp/d en EURUSD), así que ~0.30 bp/d es representativo. Se usa un margen
+#    uniforme de 0.30 bp/d (metales ~0.45), escalable con BROKER_MARGIN_MULT.
+# LIMITACIÓN: los swaps son DINÁMICOS (cambian a diario); esto es un snapshot
+# fechado. La tabla long/short por instrumento del broker refinaría el margen por
+# instrumento; el carry por tasas de política es más estable y consistente que el
+# parsing por-página (que dio USDJPY≈0, imposible).
+_POLICY_RATE = {  # % anual, UniRateAPI 2026-03
+    "USD": 4.50, "EUR": 2.50, "GBP": 4.50, "JPY": 0.50,
+    "AUD": 4.10, "CAD": 2.75, "CHF": 0.25, "HKD": 4.50,  # HKD peg → USD
+}
+_DIV_YIELD = {"SPX500": 1.3, "GER40": 2.5, "JPN225": 1.8, "HK50": 3.5}  # % anual, aprox.
+_INDEX_CCY = {"SPX500": "USD", "GER40": "EUR", "JPN225": "JPY", "HK50": "HKD"}
+_FX_LEGS = {  # (base, quote) para majors + cruces
+    "EURUSD": ("EUR", "USD"), "GBPUSD": ("GBP", "USD"), "USDJPY": ("USD", "JPY"),
+    "AUDUSD": ("AUD", "USD"), "USDCAD": ("USD", "CAD"),
+    "EURJPY": ("EUR", "JPY"), "GBPJPY": ("GBP", "JPY"), "AUDJPY": ("AUD", "JPY"),
+    "EURAUD": ("EUR", "AUD"), "GBPAUD": ("GBP", "AUD"), "EURCHF": ("EUR", "CHF"),
+}
+BROKER_MARGIN_MULT = 1.0            # 1.0 = afterprime/FTMO (~0.30 bp/d); prop firm ~1-1.5×
+_MARGIN_FX = 0.00003               # 0.30 bp/día
+_MARGIN_METAL = 0.000045           # 0.45 bp/día (afterprime XAU ≈0.47)
+_MARGIN_INDEX = 0.00003
+
+
+def _carry_daily(sym: str) -> float:
+    """Signed daily rate differential a LONG earns (fraction/day)."""
+    if sym in _FX_LEGS:
+        base, quote = _FX_LEGS[sym]
+        return (_POLICY_RATE[base] - _POLICY_RATE[quote]) / 100.0 / 360.0
+    if sym in ("XAUUSD", "XAGUSD"):                    # no yield; long pays financing
+        return -_POLICY_RATE["USD"] / 100.0 / 360.0
+    if sym in _DIV_YIELD:                              # long earns div, pays financing
+        return (_DIV_YIELD[sym] - _POLICY_RATE[_INDEX_CCY[sym]]) / 100.0 / 360.0
+    return 0.0
+
+
+def _margin_daily(sym: str) -> float:
+    base = _MARGIN_METAL if sym in ("XAUUSD", "XAGUSD") else (
+        _MARGIN_INDEX if sym in _DIV_YIELD else _MARGIN_FX)
+    return base * BROKER_MARGIN_MULT
+
+
+def _cost_for(sym: str) -> CostModel:
+    return CostModel(carry=_carry_daily(sym), swap_margin=_margin_daily(sym))
+
+
+# Default cost model and per-instrument overrides (directional swap calibrated above).
 DEFAULT_COST = CostModel()
-COSTS: dict[str, CostModel] = {sym: DEFAULT_COST for sym in INSTRUMENTS}
+COSTS: dict[str, CostModel] = {sym: _cost_for(sym) for sym in INSTRUMENTS}
 
 
 @dataclass(frozen=True)

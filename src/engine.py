@@ -75,12 +75,19 @@ def backtest(
     rates = pd.Series({col: _cost_rate(str(col), costs) for col in w.columns})
     turnover_cost = turnover.mul(rates, axis=1).sum(axis=1)
 
-    # Swap/carry: DAILY charge proportional to |weight| held (the previous day's
-    # weight earns today's return, so it is the position held). Not turnover.
-    swap_rates = pd.Series(
-        {col: costs.get(str(col), config.DEFAULT_COST).swap for col in w.columns}
+    # Swap, DIRECTIONAL, DAILY on the position held (previous day's weight):
+    #   swap_cost = swap_margin·|w_prev|  −  carry·w_prev
+    # The broker margin (swap_margin) is unidirectional (always a cost on |w|).
+    # The rate differential (carry) is SIGNED: a long earns +carry, a short earns
+    # −carry, so in a long/short book it partially cancels and can be net income.
+    prev = w.shift(1).fillna(0.0)
+    margins = pd.Series(
+        {col: costs.get(str(col), config.DEFAULT_COST).swap_margin for col in w.columns}
     )
-    swap_cost = w.shift(1).fillna(0.0).abs().mul(swap_rates, axis=1).sum(axis=1)
+    carries = pd.Series(
+        {col: costs.get(str(col), config.DEFAULT_COST).carry for col in w.columns}
+    )
+    swap_cost = (prev.abs().mul(margins, axis=1) - prev.mul(carries, axis=1)).sum(axis=1)
 
     net = gross - turnover_cost - swap_cost
     return net.rename("return")
