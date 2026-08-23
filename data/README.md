@@ -75,3 +75,11 @@ curl -s "https://stats.bis.org/api/v1/data/WS_CBPOL/M.US?startPeriod=2003-01"
 # parsear los pares TIME_PERIOD/OBS_VALUE del SDMX-XML y volcar a policy_rates.csv
 # (ver el script del change historical-swap-rates). Consultado 2026-08-22.
 ```
+
+## COT — posicionamiento (CFTC Commitments of Traders)
+
+`data/cot/<INSTRUMENTO>.csv` (8 con futuro US). Fuente: API pública CFTC Legacy
+Futures-Only (dataset `6dca-aqww`), consultado 2026-08-23. Se filtra por
+`cftc_contract_market_code` (estable) o `market_and_exchange_names`. Índice por fecha
+de datos (martes); la publicación es +3 días (viernes) — ver `src/cot.py`. Cobertura y
+duty cycle en `data/cot_coverage.md` (`scripts/cot_diagnostic.py`).
