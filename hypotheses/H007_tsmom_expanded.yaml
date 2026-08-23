@@ -176,9 +176,53 @@ diagnosticos_requeridos:
 
 # --- GESTIÓN DE COLA ---
 score_prioridad: null
-estado: pre_registrado
-intentos_realizados: 0
-fecha_test: null
+estado: muerta                    # FALSADA in-sample (neto < 0.2 en ambas muestras)
+intentos_realizados: 2           # 12m × 2 muestras; el chequeo de robustez NO se disparó
+fecha_test: 2026-08-22
+
+# --- RESULTADO (registro post-ejecución; NO se tocan los campos congelados) ---
+resultado:
+  runner: scripts/run_h007.py
+  reporte: results/H007/report.md
+  in_sample: "A 2005-01→2023-08-16 · B 2015-01→2023-08-16"
+  holdout_tocado: false
+  # BRUTO (métrica de calibración) y NETO (métrica del falsador), separados a propósito.
+  sharpe:
+    muestra_A: {bruto: 0.370, neto_0.0: 0.354, neto_0.3: 0.184, neto_1.0: -0.212}
+    muestra_B: {bruto: 0.229, neto_0.0: 0.211, neto_0.3: 0.040, neto_1.0: -0.358}
+  diagnosticos:
+    turnover_anual: {A: "~", B: "~"}   # ver reporte
+    dd_sobre_vol: "ver results/H007/report.md"
+veredicto:
+  falsador:
+    global: muerta
+    detalle: >
+      Neto (swap 0.3) A=0.184 y B=0.040, ambos < 0.2 → muerta, sin variantes. El
+      chequeo de robustez no se disparó (ninguno en [0.2,0.4]). El swap unsigned
+      diario hunde el bruto bajo el falsador, igual que H001. Caveat honesto: A cruza
+      el falsador con el swap (0.354 a 0.0 bp → 0.184 a 0.3), pero nunca alcanza 0.4.
+  calibracion_del_marco:
+    prediccion_ficha: [0.29, 0.37]
+    bruto_medido: {A: 0.370, B: 0.229}
+    contra_prediccion_ficha: "mixto (A en el borde, B por debajo)"
+    baseline_period_matched: {A: 0.246, B: 0.030}   # H001 recomputado a 2023-08-16
+    hallazgo: >
+      La predicción de la ficha [0.29,0.37] estaba MAL DERIVADA: usó el bruto de H001
+      medido a 2026 (B=0.308), pero H007 corta en 2023-08-16 (holdout) y el B
+      period-matched es 0.030 (el trend moderno del universo-9 estaba ~muerto; el
+      0.308 venía casi todo de 2023-2026). Corregido el período, la ampliación ayudó
+      MÁS de lo predicho por √N_eff (B 0.030 → 0.229, +0.20 absoluto al pasar a 17).
+    veredicto: >
+      DIRECCIÓN correcta (más amplitud → más bruto), MAGNITUD no fiable (√N_eff
+      subestimó, y la predicción estaba contaminada por período). El marco es
+      DIRECCIONALMENTE útil pero NO predice magnitudes con precisión → tratar el caso
+      de datos de futuros como dirección (rates/commodities deberían ayudar), NO como
+      estimación puntual. Consistente con docs/breadth-lessons.md.
+  accion: >
+    H007 muerta, sin variantes. Holdout intacto (no pasó in-sample). La familia trend
+    queda en 5 intentos (convención). La lección de esta corrida es de MARCO, no de
+    hipótesis: la predicción puntual falló por mala derivación de período, pero la
+    dirección (amplitud ayuda) se sostuvo.
 enmiendas:
   - fecha: 2026-08-22
     tipo: pre_ejecucion            # intentos_realizados=0, fecha_test=null
