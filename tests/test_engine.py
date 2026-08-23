@@ -27,8 +27,10 @@ def test_buy_and_hold_reproduces_known_sharpe():
     reference = engine.sharpe(prices["SPX500"].pct_change().dropna())
 
     w = signals.buy_and_hold(prices)
-    net = engine.backtest(prices, w)  # buy&hold: no recurring costs
-    got = engine.sharpe(net)
+    # Reproduction is about the engine not distorting the underlying Sharpe → test on
+    # GROSS. (Net now carries a real financing/carry drag for a held index position;
+    # cost effects are tested separately below.)
+    got = engine.sharpe(engine.backtest(prices, w, apply_costs=False))
 
     assert abs(got - reference) <= config.SHARPE_REFERENCE.tolerance
 
@@ -69,7 +71,7 @@ def test_buy_and_hold_no_recurring_turnover_cost():
     # swap=0 el único costo es la entrada; el swap (recurrente) se prueba aparte.
     prices = _series_with_known_sharpe(0.0005, 0.01, n=300)
     w = signals.buy_and_hold(prices)
-    costs = {"SPX500": config.CostModel(spread=0.001, slippage=0.0005, swap=0.0)}
+    costs = {"SPX500": config.CostModel(spread=0.001, slippage=0.0005, swap_margin=0.0)}
 
     net = engine.backtest(prices, w, costs=costs)
     gross = engine.backtest(prices, w, apply_costs=False)
@@ -83,7 +85,7 @@ def test_buy_and_hold_incurs_recurring_swap():
     # Con swap > 0, buy&hold SÍ incurre un costo diario de mantener (recurrente).
     prices = _series_with_known_sharpe(0.0005, 0.01, n=300)
     w = signals.buy_and_hold(prices)
-    costs = {"SPX500": config.CostModel(spread=0.0, slippage=0.0, swap=0.0002)}
+    costs = {"SPX500": config.CostModel(spread=0.0, slippage=0.0, swap_margin=0.0002)}
     net = engine.backtest(prices, w, costs=costs)
     gross = engine.backtest(prices, w, apply_costs=False)
     diff = (gross - net)
@@ -107,7 +109,7 @@ def test_swap_scales_with_days_held():
     dates = pd.bdate_range("2020-01-01", periods=60)
     prices = pd.DataFrame({"X": np.full(60, 100.0)}, index=dates)  # sin movimiento
     w = pd.DataFrame({"X": np.ones(60)}, index=dates)               # mantiene 1.0
-    costs = {"X": config.CostModel(spread=0, slippage=0, swap=0.001)}
+    costs = {"X": config.CostModel(spread=0, slippage=0, swap_margin=0.001)}
     net = engine.backtest(prices, w, costs=costs)
     # Sin retorno ni turnover tras la entrada: la pérdida es puro swap diario.
     assert net.iloc[1:].sum() < 0                       # swap acumula (negativo)
@@ -135,3 +137,50 @@ def test_rolling_vol_is_gap_safe_for_indices():
 
     assert np.isclose(rv["IDX"].iloc[-1], own, rtol=0.02)   # gap-safe ≈ vol propia
     assert naive < own                                      # la ingenua deflacta (sesgo direccional)
+
+
+# --- Directional swap (Bloque 2: signed carry + unidirectional broker margin) ---
+
+def _flat_prices(cols, n=40):
+    dates = pd.bdate_range("2020-01-01", periods=n)
+    return pd.DataFrame({c: np.full(n, 100.0) for c in cols}, index=dates)  # no move
+
+
+def test_long_positive_carry_receives_swap():
+    # A long in a positive-carry instrument RECEIVES swap income (net > 0 with no
+    # margin and no price move) — the differential is signed, not a pure cost.
+    prices = _flat_prices(["P"])
+    w = pd.DataFrame({"P": np.ones(len(prices))}, index=prices.index)
+    costs = {"P": config.CostModel(spread=0, slippage=0, swap_margin=0.0, carry=0.0002)}
+    net = engine.backtest(prices, w, costs=costs)
+    assert np.allclose(net.iloc[2:].to_numpy(), +0.0002)   # long earns +carry/day
+    # A short in the same instrument PAYS it.
+    ws = pd.DataFrame({"P": -np.ones(len(prices))}, index=prices.index)
+    net_s = engine.backtest(prices, ws, costs=costs)
+    assert np.allclose(net_s.iloc[2:].to_numpy(), -0.0002)  # short earns −carry/day
+
+
+def test_broker_margin_always_subtracts():
+    # The margin is unidirectional: it costs on both long and short.
+    prices = _flat_prices(["P"])
+    costs = {"P": config.CostModel(spread=0, slippage=0, swap_margin=0.0003, carry=0.0)}
+    for sign in (+1.0, -1.0):
+        w = pd.DataFrame({"P": np.full(len(prices), sign)}, index=prices.index)
+        net = engine.backtest(prices, w, costs=costs)
+        assert np.allclose(net.iloc[2:].to_numpy(), -0.0003)  # always a cost on |w|
+
+
+def test_carry_aligned_book_cheaper_than_unsigned_model():
+    # A carry-aligned long/short book (long the positive-carry, short the
+    # negative-carry) EARNS net carry, so total swap cost is LESS than the old
+    # unsigned model (margin on |w| both sides, no carry offset).
+    prices = _flat_prices(["A", "B"])
+    w = pd.DataFrame({"A": np.ones(len(prices)), "B": -np.ones(len(prices))}, index=prices.index)
+    directional = {
+        "A": config.CostModel(spread=0, slippage=0, swap_margin=0.0003, carry=+0.0002),  # long earns +
+        "B": config.CostModel(spread=0, slippage=0, swap_margin=0.0003, carry=-0.0002),  # short earns +
+    }
+    unsigned = {c: config.CostModel(spread=0, slippage=0, swap_margin=0.0003, carry=0.0) for c in "AB"}
+    net_dir = engine.backtest(prices, w, costs=directional).iloc[2:].sum()
+    net_uns = engine.backtest(prices, w, costs=unsigned).iloc[2:].sum()
+    assert net_dir > net_uns   # directional cheaper: both legs harvest carry

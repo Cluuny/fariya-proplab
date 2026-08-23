@@ -37,7 +37,7 @@ def _load(cols: list[str]) -> pd.DataFrame:
 
 def _costs_with_swap(cols: list[str], swap_bp: float) -> dict[str, config.CostModel]:
     swap = swap_bp * 1e-4
-    cm = dataclasses.replace(config.DEFAULT_COST, swap=swap)
+    cm = dataclasses.replace(config.DEFAULT_COST, swap_margin=swap)
     return {c: cm for c in cols}
 
 

@@ -41,7 +41,7 @@ def _load_in_sample() -> pd.DataFrame:
 
 
 def _costs(swap_bp: float) -> dict[str, config.CostModel]:
-    cm = dataclasses.replace(config.DEFAULT_COST, swap=swap_bp * 1e-4)
+    cm = dataclasses.replace(config.DEFAULT_COST, swap_margin=swap_bp * 1e-4)
     return {c: cm for c in INDICES}
 
 
