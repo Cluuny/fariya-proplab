@@ -60,11 +60,31 @@ y se excluyen del libro operable.
 ### Contraste contra la mejor evidencia PROPIA
 
 H007 muestra A dio **bruto 0.370** (FX+metales, con 2008). Contra el nuevo listón
-(0.424): sigue **corto por −0.054**. Pero la distancia se redujo mucho: en CFD era
-0.370 vs 0.66 = **−0.29**; en futuros 0.370 vs 0.424 = **−0.054**. No pasa, pero de
-"estructuralmente imposible" pasa a "al borde". (Y la industria reporta ~0.14 para
-trend en nuestra ventana — muy por debajo de ambos; el bruto realista de trend es el
-problema de fondo, no sólo el vehículo.)
+(0.424): corto por −0.054. En CFD era 0.370 vs 0.66 = −0.29; en futuros 0.370 vs 0.424
+= **−0.054**. De "estructuralmente imposible" a "al borde".
+
+### CORRECCIÓN de comparabilidad del Sharpe (change excess-sharpe-fix)
+
+Antes de comparar contra la industria, dos correcciones:
+- **Sharpe de exceso (Problema A):** verificado — nuestros retornos son
+  `Σ w·pct_change(precio) − costos` = ganancia de capital pura, SIN interés sobre
+  colateral. En una cuenta fondeada no se cobra ni se cobra rf, así que **nuestros
+  Sharpes YA son de exceso** y comparables al Sharpe de exceso de la industria. Restar
+  rf sería doble-conteo (bajaría H007-A neto 0.184 → 0.023 artificialmente). No se
+  corrige ningún número nuestro; el principio (usar exceso) es el correcto y ya lo
+  cumplimos. `engine.sharpe(rf=...)` existe para series que SÍ incluyan rf.
+- **Comisiones (Problema B):** el **0.14 de la industria (SG CTA Trend) es NETO de
+  comisiones de gestión** (ret 2.9% / vol 11% / Sharpe 0.14 → rf implícito ≈1.4%).
+  Sumando una comisión de gestión estándar (**~2%**, convención "2 y 20" de CTAs; rango
+  1.5-2.5% → Sharpe 0.28-0.37), el **bruto de comisiones ≈ 0.32**. Nuestros backtests
+  no pagan comisión de gestión → la comparación correcta es **0.32 (industria, bruto de
+  comisiones) vs 0.424 (nuestro requerido en futuros)**.
+
+**El hueco pasa de 3× (0.14 vs 0.42) a ~30% (0.32 vs 0.42).** Y nuestra propia H007-A
+(0.370) es de hecho *ligeramente superior* al bruto de la industria (0.32) y a 0.05 del
+requerido. El bruto realista de trend (~0.32-0.37) y el requerido de futuros (0.42)
+están **a distancia de ruido** — refuerza que el resultado más probable es INDETERMINADO,
+no un NO estructural.
 
 **Parcial Bloque 1: criterio (1) cumplido. Falta el criterio (2) — amplitud (Bloque 2).**
 
@@ -144,9 +164,17 @@ recombinaciones) por encima de 7.5.
   inflan N_eff por su ruido idiosincrático. Con continuos de futuros reales el N_eff
   podría caer por debajo de 7.5 → el (2) podría voltearse a NO-GO.
 - El coste baja el listón a 0.42, pero **ninguna familia accesible ha producido 0.42 de
-  bruto**: la mejor evidencia propia es H007-A 0.370 (corto por 0.05) y la industria
-  reporta ~0.14 para trend en nuestra ventana. **El GO compra un vehículo mejor, NO una
-  estrategia.** El problema del edge sigue sin resolver.
+  bruto**: la mejor evidencia propia es H007-A 0.370 (corto por 0.05). La industria da
+  0.14 NETO de comisiones, ≈**0.32 bruto de comisiones** (ver corrección arriba) — de
+  hecho por debajo de nuestra H007-A. **El GO compra un vehículo mejor, NO una
+  estrategia.** El problema del edge sigue sin resolver (el hueco realista es ~30%, no 3×,
+  pero sigue del lado corto).
+
+**El veredicto GO/NO-GO NO cambia con la corrección de exceso/comisiones.** El criterio
+comprometido depende de dos números (bruto requerido < 0.50 y N_eff > 7.5); ninguno se
+mueve. La corrección sólo reencuadra la *magnitud* del hueco de edge (de 3× a ~30%),
+haciéndolo aún más claramente una zona de ruido/indeterminación que un NO estructural —
+lo que refuerza, no cambia, el GO frágil.
 
 **Decisión de bajo arrepentimiento:** como el dato cuesta ~1/10 de un challenge ya
 presupuestado, el movimiento coherente con el GO marginal es **adquirir UN mes de
