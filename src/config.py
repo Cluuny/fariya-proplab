@@ -39,11 +39,14 @@ INSTRUMENTS: tuple[str, ...] = (
     "XAGUSD",
     # Índices de renta variable (geográficamente diversos)
     "SPX500",
-    "US30",
     "GER40",
     "JPN225",
     "HK50",
 )
+# US30 (Dow) retirado del universo activo: MISMA exposición que SPX500
+# (equity-US, corr ~0.95). En sizing vol-inversa se paga spread dos veces por la
+# misma posición — fricción pura sin información nueva (ver change universe-trim-us30
+# y docs/breadth-lessons.md). Se conserva su mapeo abajo por si se re-evalúa.
 # BRENT retirado del universo activo: cobertura diaria de Dukascopy sparse (~168
 # obs/año, ~1421 días hábiles faltantes en 15 años → inusable). Se conserva su
 # mapeo abajo; evaluar un símbolo de energía más denso (p. ej. WTI LIGHTCMDUSD)
