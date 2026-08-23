@@ -33,7 +33,13 @@ relacion_con_H001: >
   portafolio, rebalanceo mensual, cap max_gross).
 
 # El conteo de intentos de la FAMILIA trend, para el deflated Sharpe.
-intentos_familia_trend: 3         # 2 de H001 (12m × 2 muestras) + esta
+intentos_familia_trend: 3         # 2 de H001 (12m × 2 muestras) + 1 (H007 pre-corrida)
+intentos_familia_convencion: >
+  Convención (conservadora, sobre-contar es el lado seguro para el deflated Sharpe):
+  cada MUESTRA cuenta como un intento aunque sea la misma especificación sobre datos
+  distintos. H001 aportó 2. Antes de correr H007 el contador está en 3; las DOS
+  muestras de H007 suman 2 más → la familia trend queda en **5 tras esta corrida**.
+  El deflated Sharpe de H007 se calcula con N=5 (no 3, no 1).
 
 # --- OPERABILIDAD ---
 # Universo de 17 (Bloques 1-2): 5 majors + 6 cruces FX + 2 metales + 4 índices.
@@ -75,15 +81,16 @@ alineacion: >
   rinde 0 (engine._asset_returns).
 universo_test:
   # Dos muestras (misma lógica que H001), ajustadas a la cobertura real del universo 17.
+  # In-sample: hasta 2023-08-16 (holdout respetado, ver holdout_detalle).
   muestra_A:
     descripcion: "FX (majors + cruces) + oro + plata — histórico largo, INCLUYE 2008 (estrés)"
     instrumentos: [EURUSD, GBPUSD, USDJPY, AUDUSD, USDCAD, EURJPY, GBPJPY, AUDJPY, EURAUD, GBPAUD, EURCHF, XAUUSD, XAGUSD]
-    periodo: "2005-2026"          # EURJPY arranca 2005; todos los cruces presentes desde ahí
+    periodo: "2005-01 → 2023-08-16"   # EURJPY arranca 2005; in-sample corta en el holdout
     nota: "13 instrumentos; test de estrés (2008)."
   muestra_B:
     descripcion: "los 17, todos con 12 meses de lookback completo"
     instrumentos: [EURUSD, GBPUSD, USDJPY, AUDUSD, USDCAD, EURJPY, GBPJPY, AUDJPY, EURAUD, GBPAUD, EURCHF, XAUUSD, XAGUSD, SPX500, GER40, JPN225, HK50]
-    periodo: "2015-2026"          # GER40/HK50 arrancan 2013 → tradeable desde ~2014-2015
+    periodo: "2015-01 → 2023-08-16"   # GER40/HK50 desde 2013 → tradeable ~2014-2015; in-sample
     nota: "17 instrumentos; régimen moderno."
 costos: >
   El motor aplica spread, slippage y swap. El swap es UNSIGNED (siempre resta sobre
@@ -94,24 +101,41 @@ sensibilidad_costos:
   regla: >
     Las tres se reportan; el veredicto por muestra se dicta con swap=0.3. Si el
     veredicto cruza el falsador dentro del rango, es sobre el placeholder y se declara.
-holdout: exento                   # IDÉNTICO a H001
+holdout: respetado                # CAMBIADO (ya NO exento como H001) — ver razón
 holdout_razon: >
-  Misma exención que H001: replicación de un efecto publicado (MOP 1965-2009) SIN
-  tuneo sobre nuestros datos —la señal es literalmente la misma función que en H001—
-  y la ampliación del universo se justificó por un argumento externo independiente.
-  Ver hypotheses/HOLDOUT.md. (El holdout sagrado rige para hipótesis de DESCUBRIMIENTO
-  con libertad de especificación, p. ej. H003, no para esta replicación exacta.)
+  La exención de H001 NO se sostiene aquí. H001 fue replicación pura: efecto
+  publicado, cero libertad de especificación sobre nuestros datos. H007 sí tiene ese
+  grado de libertad: la selección concreta del universo (ESTOS 17, con US30 fuera) se
+  hizo DESPUÉS de ver morir a H001 y con la amplitud efectiva medida sobre nuestros
+  datos. Aunque el argumento de fondo fue externo (atribución de la industria), la
+  selección concreta es exactamente la clase de grado de libertad contra la que
+  existe el holdout. Y hypotheses/HOLDOUT.md dice que rige desde la primera hipótesis
+  de DESCUBRIMIENTO: una segunda mirada al mismo efecto con universo elegido tras un
+  fracaso es funcionalmente descubrimiento, no replicación.
+  ARGUMENTO DECISIVO: si se mantuviera la exención y H007 saliera bien, no se podría
+  distinguir un efecto real de un artefacto de la selección de universo — se habría
+  quemado el único mecanismo que responde esa pregunta.
+holdout_detalle: >
+  In-sample: 2005-01 → 2023-08-16 (se juzga el FALSADOR aquí). Holdout SAGRADO:
+  2023-08-17 → 2026 (config.HOLDOUT_START), reservado; se toca UNA vez, sólo si H007
+  pasa in-sample, para confirmar. Coste: ~2 años menos de muestra en un test cuyo
+  resultado esperado es "muerta" igual; beneficio: si contra pronóstico sobrevive,
+  el holdout queda intacto para confirmarlo.
 
 # --- VEREDICTO Y EXPECTATIVA (comprometidos antes de correr) ---
 metrica_exito: >
-  Sharpe NETO (swap 0.3) > 0.4 EN UNA MUESTRA → viable en ese régimen, promueve.
-  Se evalúa por muestra. El Sharpe es invariante al apalancamiento.
+  Sharpe NETO in-sample (2005/2015 → 2023-08-16, swap 0.3) > 0.4 EN UNA MUESTRA →
+  pasa a confirmación en el holdout (un solo vistazo). Se evalúa por muestra. El
+  Sharpe es invariante al apalancamiento.
+n_eff: "5.32 (17 instrumentos, tras retirar US30; era 5.20 con 18, 3.73 con 9)"
 resultado_esperado:
-  bruto_esperado: [0.29, 0.36]
+  bruto_esperado: [0.29, 0.37]
   derivacion: >
-    H001 bruto 0.244/0.308 × 1.18 (techo Grinold-Kahn por N_eff 3.73 → 5.32). La
-    mejora de amplitud es modesta (los cruces FX son recombinaciones, ver
-    docs/breadth-lessons.md), así que se espera una subida pequeña del bruto.
+    H001 bruto 0.244/0.308 × 1.194 (techo Grinold-Kahn √(N_eff nuevo/viejo) =
+    √(5.32/3.73) = 1.194) → 0.291/0.368 ≈ [0.29, 0.37]. La mejora de amplitud es
+    modesta y además SOBREESTIMADA: los cruces FX son recombinaciones de los majors
+    (cero información nueva, ver docs/breadth-lessons.md), así que el bruto real
+    podría quedar por debajo de este rango.
   neto_esperado: [0.12, 0.20]
   veredicto_esperado: "muerta (neto por debajo o al borde del falsador)"
 zona_marginal:
@@ -121,12 +145,12 @@ zona_marginal:
     Si el Sharpe neto cae en [0.2, 0.4] se corre UNA variante pre-especificada
     (lookback 6m) y se reporta el DEFLATED Sharpe. Ninguna variante más.
   conteo_intentos: >
-    El deflated Sharpe se calcula con intentos_familia_trend = 3 (2 de H001 + ésta),
-    NO con 1. Subestimar el conteo infla el deflated Sharpe.
+    El deflated Sharpe se calcula con N = 5 (la familia trend tras esta corrida, ver
+    intentos_familia_convencion), NO con 1. Subestimar el conteo infla el deflated Sharpe.
 FALSADOR: >
-  El mismo de H001: si el Sharpe NETO (swap 0.3) < 0.2 en una muestra, H007 se
-  descarta en ese régimen y NO se reintenta con variantes (salvo el único chequeo de
-  zona_marginal si cae en [0.2, 0.4]).
+  El mismo de H001: si el Sharpe NETO in-sample (swap 0.3) < 0.2 en una muestra, H007
+  se descarta en ese régimen y NO se reintenta con variantes (salvo el único chequeo
+  de zona_marginal si cae en [0.2, 0.4]). El holdout NO se toca si muere in-sample.
 
 # ==== EL PUNTO REAL DE ESTA HIPÓTESIS: calibrar el marco ====
 calibracion_del_marco:
@@ -155,3 +179,15 @@ score_prioridad: null
 estado: pre_registrado
 intentos_realizados: 0
 fecha_test: null
+enmiendas:
+  - fecha: 2026-08-22
+    tipo: pre_ejecucion            # intentos_realizados=0, fecha_test=null
+    que: >
+      (1) holdout exento → RESPETADO: la selección concreta del universo (17, US30
+      fuera) se hizo tras ver morir a H001 y con amplitud medida sobre datos propios
+      → grado de libertad de descubrimiento; con exención un H007 vivo no se
+      distinguiría de un artefacto de selección. In-sample corta en 2023-08-16.
+      (2) N_eff explicitado con su universo (5.32 con 17; 5.20 con 18; 3.73 con 9) y
+      el factor recalculado √(5.32/3.73)=1.194 → bruto_esperado [0.29, 0.37].
+      (3) convención de conteo anotada: deflated Sharpe con N=5 (familia tras esta
+      corrida).
