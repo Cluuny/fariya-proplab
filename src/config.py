@@ -13,6 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DATA_RAW = ROOT / "data" / "raw"
 DATA_CLEAN = ROOT / "data" / "clean"
+DATA_RATES = ROOT / "data" / "rates" / "policy_rates.csv"  # BIS historical policy rates
 RESULTS = ROOT / "results"
 
 # --- Universe (master document, section 8.2) ---
@@ -125,27 +126,46 @@ class CostModel:
 # SWAP CALIBRATION — real published sources, dated (como SHARPE_REFERENCE)     #
 # =========================================================================== #
 # El swap real se separa en (a) diferencial de tasas CON SIGNO y (b) margen del
-# broker unidireccional. Fuentes:
-#  · carry (diferencial): tasas de política publicadas — UniRateAPI, consultado
-#    2026-08-22 (valores con fecha ~2026-03): Fed 4.50, ECB 2.50, BoE 4.50,
-#    BoJ 0.50, RBA 4.10, BoC 2.75, SNB 0.25; HKD ligado a USD (HKMA→Fed).
-#    carry(long XXXYYY) ≈ (r_XXX − r_YYY)/360 por día (convención money-market).
-#    Cruces: aditivo por construcción (carry(EURJPY)=carry(EURUSD)+carry(USDJPY)).
-#    Índices: carry = (div_yield − financing)/360; metales: −financing/360.
-#  · swap_margin: tabla long/short publicada de un broker — afterprime.com/swaps,
-#    consultado 2026-08-23 (p. ej. EURUSD −9.43/+1.31 USD/lote → margen ≈0.35 bp/d;
-#    XAUUSD −70/+29.26 → ≈0.47). El ejemplo de FTMO (prop) da un margen similar
-#    (~0.43 bp/d en EURUSD), así que ~0.30 bp/d es representativo. Se usa un margen
-#    uniforme de 0.30 bp/d (metales ~0.45), escalable con BROKER_MARGIN_MULT.
-# LIMITACIÓN: los swaps son DINÁMICOS (cambian a diario); esto es un snapshot
-# fechado. La tabla long/short por instrumento del broker refinaría el margen por
-# instrumento; el carry por tasas de política es más estable y consistente que el
-# parsing por-página (que dio USDJPY≈0, imposible).
-_POLICY_RATE = {  # % anual, UniRateAPI 2026-03
+# broker unidireccional.
+#
+# (a) CARRY — HISTÓRICO, no un snapshot. Series mensuales de tasas de política de
+#     BIS (WS_CBPOL), 2003-2026, descargadas a data/rates/policy_rates.csv
+#     (consultado 2026-08-22, stats.bis.org/api/v1). Se construye una MATRIZ
+#     fecha×instrumento en src/rates.py (reindexada a diario, ffill). USAR UN
+#     SNAPSHOT DE 2026 SOBRE 2005-2023 ESTABA MAL: las tasas reales fueron muy
+#     distintas y el signo del carry se INVIERTE en parte de la muestra (p. ej.
+#     EURUSD fue POSITIVO en 2009-2015, cuando EUR>USD). carry(long XXXYYY) =
+#     (r_XXX − r_YYY); cruces aditivos; índices (div_yield − financing); metales
+#     −financing. Los div_yield de índices se mantienen CONSTANTES (simplificación;
+#     se mueven poco, efecto de 2º orden): SPX 1.3, GER40 2.5, JPN225 1.8, HK50 3.5.
+#     El snapshot _POLICY_RATE de abajo es sólo para el carry "actual"
+#     (CostModel.carry escalar, uso live); los BACKTESTS pasan la matriz histórica.
+#
+# (b) SWAP_MARGIN — tabla long/short publicada de un broker (afterprime.com/swaps,
+#     2026-08-23): EURUSD −9.43/+1.31 → margen ≈0.35 bp/d; XAUUSD −70/+29.26 →
+#     ≈0.47. Validado vs el ejemplo de FTMO (~0.43 bp/d EURUSD). Base ~0.30 bp/d
+#     (metales ~0.45), escalable con BROKER_MARGIN_MULT.
+#
+# CONVENCIÓN 360→261 (bug corregido): el broker cobra 365 días de carry/margen
+# repartidos en ~261 SESIONES (swap triple del miércoles). El motor aplica el
+# cargo sólo en días de cotización, así que AMBOS componentes se multiplican por
+# TRADING_DAY_SWAP_FACTOR = 365/261 ≈ 1.40. Consecuencia registrada: el margen
+# efectivo sube a 0.30×1.40 = 0.42 bp/d — el modelo corregido es MÁS punitivo en
+# margen que el placeholder unsigned (0.30) que mató a H001/H007, no menos.
+#
+# VALIDACIÓN CRUZADA (dos fuentes independientes, al 2026-08, dentro del 10%):
+#   carry implícito del broker = (swap_long − swap_short)/2 [antes del factor]
+#     EURUSD: broker −0.46 bp/d  vs  tasas −0.556 bp/d
+#     XAUUSD: broker −1.15 bp/d  vs  tasas −1.25 bp/d
+#
+# LIMITACIÓN: los swaps son dinámicos; margen y div_yields son snapshots fechados.
+TRADING_DAY_SWAP_FACTOR = 365.0 / 261.0   # 365 días de carry sobre ~261 sesiones
+
+_POLICY_RATE = {  # % anual — SNAPSHOT actual (BIS 2026-07); sólo para el carry live
     "USD": 4.50, "EUR": 2.50, "GBP": 4.50, "JPY": 0.50,
-    "AUD": 4.10, "CAD": 2.75, "CHF": 0.25, "HKD": 4.50,  # HKD peg → USD
+    "AUD": 4.10, "CAD": 2.75, "CHF": 0.25, "HKD": 4.50,
 }
-_DIV_YIELD = {"SPX500": 1.3, "GER40": 2.5, "JPN225": 1.8, "HK50": 3.5}  # % anual, aprox.
+_DIV_YIELD = {"SPX500": 1.3, "GER40": 2.5, "JPN225": 1.8, "HK50": 3.5}  # % anual, constante
 _INDEX_CCY = {"SPX500": "USD", "GER40": "EUR", "JPN225": "JPY", "HK50": "HKD"}
 _FX_LEGS = {  # (base, quote) para majors + cruces
     "EURUSD": ("EUR", "USD"), "GBPUSD": ("GBP", "USD"), "USDJPY": ("USD", "JPY"),
@@ -153,28 +173,30 @@ _FX_LEGS = {  # (base, quote) para majors + cruces
     "EURJPY": ("EUR", "JPY"), "GBPJPY": ("GBP", "JPY"), "AUDJPY": ("AUD", "JPY"),
     "EURAUD": ("EUR", "AUD"), "GBPAUD": ("GBP", "AUD"), "EURCHF": ("EUR", "CHF"),
 }
-BROKER_MARGIN_MULT = 1.0            # 1.0 = afterprime/FTMO (~0.30 bp/d); prop firm ~1-1.5×
-_MARGIN_FX = 0.00003               # 0.30 bp/día
-_MARGIN_METAL = 0.000045           # 0.45 bp/día (afterprime XAU ≈0.47)
+BROKER_MARGIN_MULT = 1.0            # 1.0 = afterprime/FTMO raw; prop firm peor → sensibilidad {1.0, 1.5}
+_MARGIN_FX = 0.00003               # 0.30 bp/noche (antes del factor 365/261)
+_MARGIN_METAL = 0.000045           # 0.45 bp/noche
 _MARGIN_INDEX = 0.00003
 
 
 def _carry_daily(sym: str) -> float:
-    """Signed daily rate differential a LONG earns (fraction/day)."""
+    """Carry 'actual' (snapshot) por sesión — sólo uso live; los backtests usan
+    la matriz histórica de src/rates.py. Incluye el factor 365/261."""
+    f = TRADING_DAY_SWAP_FACTOR / 100.0 / 360.0
     if sym in _FX_LEGS:
         base, quote = _FX_LEGS[sym]
-        return (_POLICY_RATE[base] - _POLICY_RATE[quote]) / 100.0 / 360.0
-    if sym in ("XAUUSD", "XAGUSD"):                    # no yield; long pays financing
-        return -_POLICY_RATE["USD"] / 100.0 / 360.0
-    if sym in _DIV_YIELD:                              # long earns div, pays financing
-        return (_DIV_YIELD[sym] - _POLICY_RATE[_INDEX_CCY[sym]]) / 100.0 / 360.0
+        return (_POLICY_RATE[base] - _POLICY_RATE[quote]) * f
+    if sym in ("XAUUSD", "XAGUSD"):
+        return -_POLICY_RATE["USD"] * f
+    if sym in _DIV_YIELD:
+        return (_DIV_YIELD[sym] - _POLICY_RATE[_INDEX_CCY[sym]]) * f
     return 0.0
 
 
 def _margin_daily(sym: str) -> float:
     base = _MARGIN_METAL if sym in ("XAUUSD", "XAGUSD") else (
         _MARGIN_INDEX if sym in _DIV_YIELD else _MARGIN_FX)
-    return base * BROKER_MARGIN_MULT
+    return base * BROKER_MARGIN_MULT * TRADING_DAY_SWAP_FACTOR   # 365/261 convención
 
 
 def _cost_for(sym: str) -> CostModel:

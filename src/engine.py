@@ -48,6 +48,7 @@ def backtest(
     weights: pd.DataFrame,
     *,
     costs: dict[str, config.CostModel] | None = None,
+    carry_matrix: pd.DataFrame | None = None,
     apply_costs: bool = True,
 ) -> pd.Series:
     """Return the strategy's net return series.
@@ -84,10 +85,19 @@ def backtest(
     margins = pd.Series(
         {col: costs.get(str(col), config.DEFAULT_COST).swap_margin for col in w.columns}
     )
-    carries = pd.Series(
-        {col: costs.get(str(col), config.DEFAULT_COST).carry for col in w.columns}
-    )
-    swap_cost = (prev.abs().mul(margins, axis=1) - prev.mul(carries, axis=1)).sum(axis=1)
+    # carry: a time-varying matrix (date×instrument) if provided — HISTORICAL rates,
+    # the correct choice for a backtest — else the per-instrument scalar from the
+    # cost model (the "current" snapshot, for live/static use).
+    if carry_matrix is not None:
+        carry_term = prev.mul(
+            carry_matrix.reindex(index=w.index, columns=w.columns).fillna(0.0)
+        ).sum(axis=1)
+    else:
+        carries = pd.Series(
+            {col: costs.get(str(col), config.DEFAULT_COST).carry for col in w.columns}
+        )
+        carry_term = prev.mul(carries, axis=1).sum(axis=1)
+    swap_cost = prev.abs().mul(margins, axis=1).sum(axis=1) - carry_term
 
     net = gross - turnover_cost - swap_cost
     return net.rename("return")

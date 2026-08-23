@@ -63,3 +63,15 @@ python -m src.dukascopy --from 2003-05-05
 ```bash
 python -m src.loaders     # raw → data/clean/*.parquet + reporte de calidad
 ```
+
+## Tasas de política históricas (para el carry del swap)
+
+`data/rates/policy_rates.csv` (BIS WS_CBPOL, mensual, 8 divisas, 2003-2026). Se
+usa para el `carry` direccional histórico del swap (`src/rates.py`). Regenerar:
+
+```bash
+# por cada divisa (US, XM=euro, JP, GB, AU, CA, CH, HK) desde la API v1 de BIS:
+curl -s "https://stats.bis.org/api/v1/data/WS_CBPOL/M.US?startPeriod=2003-01"
+# parsear los pares TIME_PERIOD/OBS_VALUE del SDMX-XML y volcar a policy_rates.csv
+# (ver el script del change historical-swap-rates). Consultado 2026-08-22.
+```
