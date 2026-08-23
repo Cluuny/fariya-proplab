@@ -79,3 +79,63 @@ Caveats honestos (no invalidan el cribado, sí acotan la expectativa):
 **Conclusión A.4:** H002 pasa el filtro #6 (carry > margen) y merece pre-registro
 formal (con su estimación de gross/turnover y sus caveats de concentración/crash),
 a diferencia de H005. NO se pre-registra ni se corre todavía.
+
+---
+
+# Las dos palancas que bajan el suelo (Bloque B)
+
+El suelo NO es fijo — pero de las dos palancas candidatas, **ninguna funciona como se
+esperaba**. Reproducir: `scripts/cost_levers.py`.
+
+## B.1 — Barrido de gross exposure → NO es palanca (Sharpe neto invariante)
+
+Señal tsmom sobre los 17, escalando los pesos a gross objetivo G:
+
+| G | Sharpe bruto | Sharpe neto |
+|---|---|---|
+| 0.50 → 2.50 (todos) | +0.229 (plano) | −0.145 (plano) |
+
+**Expectativa del reviewer (neto con máximo interior): REFUTADA.** El neto es TAN plano
+como el bruto. Razón: margen (∝gross), spread (∝turnover∝gross), carry (∝gross), retorno
+bruto (∝gross) Y la vol (∝gross) escalan TODOS linealmente. Entonces
+`neto = bruto − coste/vol`, y `coste/vol` es invariante al escalado → no hay óptimo
+interior. **El gross exposure NO baja el suelo** (dado que la estrategia ya apunta a una
+vol objetivo). Subir diversificación sí ayudaría al bruto (√N_eff), pero eso es cambiar
+la señal, no escalar el gross.
+
+## B.2 — Horizonte de holding → sólo recorta el spread (despreciable)
+
+| Rebalanceo | turnover | margen | spread | Sharpe neto |
+|---|---|---|---|---|
+| mensual | 10.9× | 2.20% | 0.16% | −0.008 |
+| bimestral | 8.4× | 2.23% | 0.13% | −0.019 |
+| trimestral | 6.3× | 2.16% | 0.10% | −0.047 |
+
+**El margen es INVARIANTE al holding** (se paga cada día que se mantiene, sin importar la
+frecuencia de rebalanceo); alargar el holding sólo baja el spread (0.16%→0.10%, ~0.06%),
+despreciable frente al margen de 2.2%. Y el neto empeora (la señal de trend pierde
+frescura). **El horizonte de holding NO baja el suelo de forma material.**
+
+## Respuesta combinada — ¿qué perfil supera el suelo?
+
+El suelo está DOMINADO por el margen (~2.2%/año, ~92% del coste), que es
+`margen = margin_bp/día × (gross promedio sobre TODOS los días) × 261`. Es irreducible
+para una estrategia que está **siempre en el mercado**. Las dos palancas obvias fallan:
+gross scaling (neto invariante) y holding largo (sólo recorta el spread). Por tanto, el
+perfil que tiene la mejor probabilidad de superar el suelo NO es "más diversificado a más
+gross" ni "holding más largo", sino:
+
+1. **Edge bruto mucho mayor** — Sharpe bruto > **0.64** (break-even 0.24 + umbral 0.40).
+   El trend real (0.23-0.37) no llega; hace falta una familia con más señal.
+2. **Duty cycle bajo** — estar FLAT la mayor parte del tiempo. El margen se paga sólo
+   mientras se mantiene posición, así que el gross PROMEDIO-sobre-todos-los-días es lo que
+   cuenta. Una estrategia activa el ~19% de los días (como TOM) paga ~1/5 del margen de
+   una always-in. (TOM murió igual por bruto débil, pero el mecanismo es real y es la
+   única forma estructural de bajar el margen.)
+
+**Criterio de selección de la próxima hipótesis (POR ENCIMA del orden de la cola):**
+priorizar hipótesis con (a) bruto reportado alto en la literatura (>0.64 tras el filtro
+#6) y/o (b) bajo duty cycle (señal selectiva, flat la mayor parte del tiempo). H002
+(carry) tiene bruto/carry favorable (pasó el cribado) pero es always-in (duty cycle alto)
+y concentrado — su margen será alto; su pre-registro debe estimar gross y duty cycle y
+pasar el filtro #6 con esos números.
