@@ -139,6 +139,99 @@ def tsmom(
     return out
 
 
+def _tom_mask(index: pd.Index, first_n: int = 3, last_n: int = 1) -> pd.Series:
+    """Boolean turn-of-the-month mask over a DatetimeIndex.
+
+    True on the first `first_n` trading days of each month plus the last `last_n`
+    trading day(s), computed over the frame's own trading calendar. This is the
+    [-1, +3] window (the last day of a month is the [-1] of the next). ~19% of days.
+    """
+    idx = pd.DatetimeIndex(index)
+    months = idx.to_period("M")
+    pos = pd.Series(range(len(idx)), index=idx)
+    grp = pos.groupby(months)
+    rank_from_start = grp.cumcount() + 1
+    size = grp.transform("size")
+    rank_from_end = size - grp.cumcount()
+    is_first = rank_from_start <= first_n
+    # Last-of-month is only knowable once the month has rolled over. For the frame's
+    # FINAL month (which may be incomplete — mid-month cut, or live "today") we do
+    # NOT flag its last days: doing so would be look-ahead (you can't know today is
+    # the month's last trading day). First-`first_n` days ARE knowable as they occur.
+    complete_month = pd.Series((months != months[-1]), index=idx)
+    is_last = (pd.Series(rank_from_end.to_numpy() <= last_n, index=idx)) & complete_month
+    mask = pd.Series(is_first.to_numpy(), index=idx) | is_last
+    return mask
+
+
+def _long_inverse_vol(
+    prices: pd.DataFrame,
+    active_mask: pd.Series,
+    *,
+    vol_window: int = 63,
+    vol_target: float = 0.08,
+    max_gross: float = config.MAX_GROSS_EXPOSURE,
+) -> pd.DataFrame:
+    """Long-only inverse-vol weights, active only on `active_mask` days, scaled
+    EX-ANTE to a ~`vol_target` portfolio vol and capped at `max_gross`.
+
+    Shared by `tom_seasonal` and the null benchmark (run_h003.py): the null uses
+    the SAME constructor with a random mask, so it differs only in WHICH days are
+    active. Ex-ante scalar is a one-step rolling scalar (shift 1), no look-ahead.
+    """
+    if prices.shape[1] == 0:
+        return pd.DataFrame(index=prices.index.copy())
+    mask = active_mask.reindex(prices.index).fillna(False).astype(float)
+
+    vol = engine.rolling_vol(prices, vol_window)
+    raw = (1.0 / vol.replace(0.0, np.nan)).replace([np.inf, -np.inf], np.nan).fillna(0.0)
+    raw = raw.mul(mask, axis=0)  # long-only, active only on mask days
+    gross_raw = raw.abs().sum(axis=1)
+    rel = raw.div(gross_raw.where(gross_raw > 0, np.nan), axis=0).fillna(0.0)
+
+    asset_ret = engine._asset_returns(prices)
+    port_ret = (rel.shift(1).fillna(0.0) * asset_ret).sum(axis=1)
+    # Fixed annualization constant (NOT bars_per_year of the whole series, which
+    # depends on the final date → would rescale past weights when the series is
+    # extended; a series-length dependency the ex-ante rule forbids). The vol
+    # target is approximate and Sharpe is scale-invariant, so a constant is fine.
+    ann = np.sqrt(config.TRADING_DAYS_PER_YEAR)
+    port_vol = (port_ret.rolling(vol_window).std() * ann).shift(1)
+    scalar = (vol_target / port_vol).replace([np.inf, -np.inf], np.nan)
+
+    weights = rel.mul(scalar, axis=0)
+    gross = weights.abs().sum(axis=1)
+    over = gross > max_gross
+    if over.any():
+        clip = pd.Series(1.0, index=weights.index)
+        clip[over] = max_gross / gross[over]
+        weights = weights.mul(clip, axis=0)
+    return weights.fillna(0.0)
+
+
+def tom_seasonal(
+    prices: pd.DataFrame,
+    /,
+    *,
+    first_n: int = 3,
+    last_n: int = 1,
+    vol_window: int = 63,
+    vol_target: float = 0.08,
+    max_gross: float = config.MAX_GROSS_EXPOSURE,
+) -> pd.DataFrame:
+    """Turn-of-the-month seasonality (H003), pure signal conforming to the contract.
+
+    Long-only in the turn-of-the-month window (first `first_n` trading days of the
+    month + last `last_n`, i.e. [-1, +3]), flat otherwise. Inverse-vol sizing scaled
+    EX-ANTE to a ~`vol_target` PORTFOLIO vol, capped at `max_gross`. See
+    hypotheses/H003_seasonality.yaml (frozen contract).
+    """
+    mask = _tom_mask(prices.index, first_n=first_n, last_n=last_n)
+    return _long_inverse_vol(
+        prices, mask, vol_window=vol_window, vol_target=vol_target, max_gross=max_gross
+    )
+
+
 def buy_and_hold(prices: pd.DataFrame, /, *, weight: float = 1.0) -> pd.DataFrame:
     """Reference signal: constant exposure, split across instruments.
 
