@@ -33,3 +33,11 @@ def test_required_gross_by_duty_cycle():
     assert abs(cm.sharpe_bruto_requerido_duty(0.1) - 0.424) < 1e-9  # low duty → floor ~umbral
     # monotone: lower duty → lower required gross (margin saving)
     assert cm.sharpe_bruto_requerido_duty(0.1) < cm.sharpe_bruto_requerido_duty(1.0)
+
+
+def test_low_duty_raises_the_active_bar():
+    from src import costs_model as cm
+    # CORRECCIÓN: bajar el duty SUBE el Sharpe activo requerido (0.40/√duty + 0.245).
+    assert abs(cm.sharpe_activo_requerido(1.0) - 0.645) < 1e-3
+    assert abs(cm.sharpe_activo_requerido(0.2) - 1.139) < 1e-3
+    assert cm.sharpe_activo_requerido(0.1) > cm.sharpe_activo_requerido(1.0)   # sube, no baja

@@ -70,29 +70,36 @@ mantiene).
 ## Diagnóstico previo — duty cycle disponible (sin pre-registrar nada)
 
 Fracción del tiempo en extremos de posicionamiento (percentil rodante 3 años del neto
-de specs). Ese número ES el duty cycle disponible, y fija el gross requerido:
+de specs). Ese número ES el duty cycle disponible:
 
-| inst | duty @ p10/90 | duty @ p5/95 | gross requerido (@p10/90) |
-|---|---|---|---|
-| EURUSD | 22.9% | 14.0% | 0.45 |
-| GBPUSD | 25.6% | 14.7% | 0.46 |
-| AUDUSD | 25.0% | 14.8% | 0.46 |
-| USDJPY | 31.0% | 18.5% | 0.47 |
-| USDCAD | 24.4% | 13.7% | 0.46 |
-| XAUUSD | 29.1% | 17.5% | 0.47 |
-| XAGUSD | 29.1% | 18.3% | 0.47 |
-| SPX500 | 20.7% | 10.9% | 0.45 |
+| inst | duty @ p10/90 | duty @ p5/95 |
+|---|---|---|
+| EURUSD | 22.9% | 14.0% |
+| GBPUSD | 25.6% | 14.7% |
+| AUDUSD | 25.0% | 14.8% |
+| USDJPY | 31.0% | 18.5% |
+| USDCAD | 24.4% | 13.7% |
+| XAUUSD | 29.1% | 17.5% |
+| XAGUSD | 29.1% | 18.3% |
+| SPX500 | 20.7% | 10.9% |
 
-**El duty cycle disponible es ~20-30% (p10/90) o ~11-18% (p5/95)** → gross requerido
-**~0.42-0.47**, frente a **0.64** de una estrategia price-based always-in. Ésa es la
-razón estructural para explorar COT: **baja el listón de coste ~0.20 de Sharpe** al
-operar sólo en extremos.
+**CORRECCIÓN (una conclusión previa de este doc era incorrecta):** el duty bajo NO
+baja el listón. El requerido de la SERIE COMPLETA baja con el duty (0.24·duty+0.40),
+pero el ALCANZABLE se diluye igual sobre los días flat (`Sharpe_whole ≈
+Sharpe_activo·√duty`). Lo que decide es el **Sharpe del período ACTIVO requerido**,
+que **SUBE** al bajar el duty (`costs_model.sharpe_activo_requerido`):
 
-## Conclusión
+    Sharpe_activo requerido = 0.40/√duty + 0.245
+    duty 100% → 0.645 · 50% → 0.81 · 20% → 1.14 · 10% → 1.51
 
-8 instrumentos con COT limpio y profundo, alineado point-in-time, con un duty cycle
-natural de ~20% → gross requerido ~0.45. Es la primera fuente que puede pasar el
-filtro #6 con un edge realista (a diferencia de las tres price-based que murieron a
-0.64). **NO se pre-registra H008 todavía**: la ficha se escribe con estos números de
-cobertura y duty cycle a la vista, y debe estimar su gross esperado contra el ~0.45
-requerido.
+Con duty ~20% (p10/90), COT necesita un Sharpe activo **~1.1**, no ~0.45.
+
+## Conclusión (corregida)
+
+8 instrumentos con COT limpio y profundo, alineado point-in-time. **El argumento a
+favor de COT NO es "duty bajo baja el listón" (falso) sino que es INFORMACIÓN
+NO-DE-PRECIO**: con precios competimos contra todos; con posicionamiento, no. Ése
+siempre fue el argumento fuerte. El listón real (Sharpe activo ~1.1 a duty 20%) es
+ALTO — por eso hay que CRIBAR el efecto con los datos ya ingeridos antes de
+pre-registrar nada (`docs/cot_diagnostic.md`). **NO se pre-registra H008** hasta ver
+el Sharpe activo condicional.

@@ -6,12 +6,17 @@ posición abierta). Criterio de admisión, POR ENCIMA del orden de la cola:
     sharpe_bruto_requerido ≈ 0.24 × duty_cycle + 0.40   (costs_model.sharpe_bruto_requerido_duty)
     duty 100% → 0.64   ·   50% → 0.52   ·   20% → 0.45   ·   10% → 0.42
 
-**Trampa (no es magia):** el bruto de una estrategia de duty bajo se mide sobre TODA
-la serie, flat days incluidos. Un efecto grande en 20 días/año se diluye al
-anualizar: `Sharpe_whole ≈ Sharpe_activo × √duty`. Para cumplir el requerido con duty
-bajo hace falta `Sharpe_activo ≥ (0.24·duty+0.40)/√duty`. El ahorro de margen (lineal)
-y la dilución (√duty) se compensan en parte. Duty bajo ayuda, pero exige edge activo
-fuerte.
+**Trampa — el duty bajo NO baja el listón (corrige un error de framing):** el bruto de
+una estrategia de duty bajo se mide sobre TODA la serie, flat days incluidos. Un
+efecto grande en 20 días/año se diluye al anualizar (`Sharpe_whole ≈ Sharpe_activo ×
+√duty`). El número de decisión es el **Sharpe del período ACTIVO requerido**, que
+**SUBE** al bajar el duty:
+
+    Sharpe_activo requerido = 0.40/√duty + 0.245   (costs_model.sharpe_activo_requerido)
+    duty 100% → 0.645 · 50% → 0.81 · 20% → 1.14 · 10% → 1.51
+
+El requerido de serie completa (0.24·duty+0.40) baja con el duty, pero el alcanzable
+se diluye igual → duty bajo exige un edge ACTIVO mucho más fuerte, no más débil.
 
 ## Tabla de triaje (entradas vivas)
 
@@ -25,17 +30,16 @@ fuerte.
 
 ## Casos resueltos explícitamente
 
-**H002 (carry) — RECHAZADA-POR-COSTE.** Pasó el cribado A.4 (carry 2.17% vs margen
-1.10%) porque esa pregunta era carry vs MARGEN. El filtro #6 pregunta carry vs
-MARGEN + UMBRAL. Evidencia propia medida (portafolio long top-3/short bottom-3,
-vol-inversa, 8% vol): **Sharpe bruto (spot+carry) = 0.495, neto = 0.282.** El bruto
-0.495 < 0.64 requerido → el neto (~0.28) no alcanza el umbral 0.40. Es el mejor neto
-del proyecto (trend daba ~0.03-0.08), pero estructuralmente corto.
-Riesgo de concentración registrado: **N_eff FX 3.41, casi todo short-JPY — no es una
-cartera, es una posición.** La prima de carry es compensación por riesgo de crash, y
-un crash del yen es exactamente lo que una barrera absorbente no perdona: ese 0.282
-neto es engañoso (P(pasar challenge) lo castigaría por la cola). Doble razón para no
-correrla.
+**H002 (carry) — RECHAZADA. Motivo PRINCIPAL: concentración, no coste.** Evidencia
+propia medida (portafolio long top-3/short bottom-3, vol-inversa, 8% vol): **Sharpe
+bruto (spot+carry) = 0.495, neto = 0.282** — el **mejor resultado del proyecto** (trend
+daba ~0.03-0.08). Muere por **umbral, no por falsador** (0.282 > 0.2, pero < 0.4).
+La razón de rechazo NO es el coste sino la **concentración**: N_eff FX 3.41, casi todo
+**short-JPY — no es una cartera, es una posición**. La prima de carry es compensación
+por riesgo de CRASH, y un crash del yen es exactamente lo que una barrera absorbente
+no perdona → descalificante contra el objetivo de P(pasar challenge), con independencia
+del Sharpe. Ese 0.282 es engañoso: paga por asumir el riesgo de cola que el challenge
+castiga. (El coste es secundario: su gross 0.495 < 0.64 requerido de todos modos.)
 
 **H005 (reversión corto plazo) — RECHAZADA-POR-COSTE.** Duty ~100% y turnover 50-100×
 → requerido ~0.78 (0.64 + ~0.14 de spread por la rotación). La reversión a la media a

@@ -77,12 +77,25 @@ def sharpe_bruto_requerido_duty(duty_cycle: float, umbral: float = 0.40,
     The margin is paid only on days with a position, so the break-even scales with
     the duty cycle: duty 100% → 0.64, 50% → 0.52, 20% → 0.45, 10% → 0.42.
 
-    TRAMPA (documentar): el bruto de una estrategia de duty bajo se mide sobre TODA
-    la serie, incluidos los días flat. Un efecto grande en sus 20 días/año se DILUYE
-    al anualizar: el Sharpe whole-series ≈ Sharpe_activo × √duty (la media ∝ duty, la
-    desv. ∝ √duty). Así que para cumplir `requerido` con duty bajo hace falta un
-    Sharpe del período ACTIVO alto: `activo ≥ (0.24·duty + 0.40)/√duty`. El ahorro de
-    margen es real (break-even baja lineal) pero la dilución (√duty) NO es magia:
-    parcialmente se compensan. duty bajo ayuda, pero exige un edge activo fuerte.
+    Este es el requerido de la SERIE COMPLETA. NO es el número de decisión para una
+    estrategia de duty bajo: ver sharpe_activo_requerido — bajar el duty SUBE el
+    listón en términos de señal activa, no lo baja.
     """
     return breakeven_full * duty_cycle + umbral
+
+
+def sharpe_activo_requerido(duty_cycle: float) -> float:
+    """Sharpe del PERÍODO ACTIVO requerido para cumplir el umbral, a un duty dado.
+
+        Sharpe_activo ≈ 0.40/√duty + 0.245
+        duty 100% → 0.645 · 50% → 0.81 · 20% → 1.14 · 10% → 1.51
+
+    CLAVE (corrige un error previo): bajar el duty cycle SUBE este listón, no lo baja.
+    El bruto de la serie completa se DILUYE sobre los días flat (`Sharpe_whole ≈
+    Sharpe_activo·√duty`: media ∝ duty, desv. ∝ √duty), y ese término (0.40/√duty)
+    domina al ahorro de margen (~constante 0.245). El requerido de serie completa
+    (0.24·duty+0.40) baja con el duty, pero el ALCANZABLE se diluye igual → lo que
+    importa es el Sharpe ACTIVO, que sube. Duty bajo NO baja el coste efectivo del
+    edge; el argumento de COT es la INFORMACIÓN no-de-precio, no un listón más bajo.
+    """
+    return 0.40 / (duty_cycle ** 0.5) + 0.245
