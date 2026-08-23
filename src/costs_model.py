@@ -62,3 +62,27 @@ def sharpe_bruto_requerido(vol_objetivo: float, gross: float, turnover: float,
 def break_even(vol_objetivo: float, gross: float, turnover: float, **kw) -> float:
     """Gross Sharpe at which net = 0."""
     return sharpe_bruto_requerido(vol_objetivo, gross, turnover, umbral=0.0, **kw)
+
+
+# Break-even gross Sharpe at 100% duty (margin cost / vol at gross ~1.7, vol 8%).
+BREAKEVEN_FULL_DUTY = 0.24
+
+
+def sharpe_bruto_requerido_duty(duty_cycle: float, umbral: float = 0.40,
+                                breakeven_full: float = BREAKEVEN_FULL_DUTY) -> float:
+    """Required WHOLE-SERIES gross Sharpe as a function of DUTY CYCLE.
+
+        requerido ≈ breakeven_full × duty_cycle + umbral      (0.24·duty + 0.40)
+
+    The margin is paid only on days with a position, so the break-even scales with
+    the duty cycle: duty 100% → 0.64, 50% → 0.52, 20% → 0.45, 10% → 0.42.
+
+    TRAMPA (documentar): el bruto de una estrategia de duty bajo se mide sobre TODA
+    la serie, incluidos los días flat. Un efecto grande en sus 20 días/año se DILUYE
+    al anualizar: el Sharpe whole-series ≈ Sharpe_activo × √duty (la media ∝ duty, la
+    desv. ∝ √duty). Así que para cumplir `requerido` con duty bajo hace falta un
+    Sharpe del período ACTIVO alto: `activo ≥ (0.24·duty + 0.40)/√duty`. El ahorro de
+    margen es real (break-even baja lineal) pero la dilución (√duty) NO es magia:
+    parcialmente se compensan. duty bajo ayuda, pero exige un edge activo fuerte.
+    """
+    return breakeven_full * duty_cycle + umbral

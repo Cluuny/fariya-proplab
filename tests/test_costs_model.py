@@ -24,3 +24,12 @@ def test_higher_turnover_needs_higher_gross_sharpe():
     lo = cm.sharpe_bruto_requerido(0.08, 1.5, 10)
     hi = cm.sharpe_bruto_requerido(0.08, 1.5, 75)   # reversión corto plazo
     assert hi > lo + 0.05                            # el spread de rotación pesa
+
+
+def test_required_gross_by_duty_cycle():
+    from src import costs_model as cm
+    assert abs(cm.sharpe_bruto_requerido_duty(1.0) - 0.64) < 1e-9   # always-in
+    assert abs(cm.sharpe_bruto_requerido_duty(0.5) - 0.52) < 1e-9
+    assert abs(cm.sharpe_bruto_requerido_duty(0.1) - 0.424) < 1e-9  # low duty → floor ~umbral
+    # monotone: lower duty → lower required gross (margin saving)
+    assert cm.sharpe_bruto_requerido_duty(0.1) < cm.sharpe_bruto_requerido_duty(1.0)
