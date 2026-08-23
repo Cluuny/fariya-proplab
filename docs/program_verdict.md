@@ -31,8 +31,13 @@ coste/concentración/evidencia, una fuera por datos. **Cero supervivientes.**
    activo requerido SUBE**: 0.40/√duty + 0.245 = **1.14 a duty 20%**, 1.51 a 10%. Ser
    selectivo no baja el coste efectivo del edge. `docs/queue_triage.md`.
 3. **Ninguna familia accesible produce 0.64 de bruto.** Los mejores: carry 0.495 (bruto),
-   trend 0.370 (H007-A) — ambos cortos. La industria da ~0.14 para trend en nuestra
-   ventana. El edge no está en lo que podemos operar hoy.
+   trend 0.370 (H007-A) — ambos cortos. La industria da 0.14 para trend en nuestra
+   ventana, pero eso es NETO de comisiones de gestión (~2%, "2 y 20"); **bruto de
+   comisiones ≈ 0.32** — comparable a nuestra H007-A 0.370, no 3× por debajo. El edge no
+   está en lo que podemos operar hoy, pero el hueco realista es de magnitud, no estructural
+   (ver `docs/futures_case.md`, corrección de comparabilidad del Sharpe). Nota metodológica:
+   nuestros Sharpes YA son de exceso (P&L de precio, sin interés sobre colateral en cuenta
+   fondeada), así que son directamente comparables al Sharpe de exceso de la industria.
 4. **Las restricciones son de DATOS y VEHÍCULO, no de MÉTODO.** El método funcionó: los
    falsadores mataron lo que tenían que matar, el suelo de costes cribó el resto, los
    veredictos fueron honestos (incluidas expectativas comprometidas refutadas). Lo que

@@ -184,3 +184,16 @@ def test_carry_aligned_book_cheaper_than_unsigned_model():
     net_dir = engine.backtest(prices, w, costs=directional).iloc[2:].sum()
     net_uns = engine.backtest(prices, w, costs=unsigned).iloc[2:].sum()
     assert net_dir > net_uns   # directional cheaper: both legs harvest carry
+
+
+def test_sharpe_default_is_excess_no_double_subtraction():
+    # Nuestros retornos ya son de exceso (P&L de precio, sin rf sobre colateral):
+    # rf=0 por defecto → no se resta nada. Pasar rf>0 baja el Sharpe ~rf/vol
+    # (para una serie que SÍ incluyera rf).
+    dates = pd.bdate_range("2010-01-01", periods=2000)
+    r = pd.Series(np.random.default_rng(3).normal(0.0004, 0.01, 2000), index=dates)
+    s0 = engine.sharpe(r)                       # exceso (default)
+    s_rf = engine.sharpe(r, rf=0.02)            # restando 2%/año
+    assert s0 > s_rf
+    vol = r.std(ddof=0) * np.sqrt(engine.bars_per_year(r))
+    assert abs((s0 - s_rf) - 0.02 / vol) < 0.02   # la diferencia ≈ rf/vol

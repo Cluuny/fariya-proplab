@@ -140,14 +140,24 @@ def rolling_vol(
     return pd.DataFrame(out, index=prices.index)
 
 
-def sharpe(returns: pd.Series, *, periods_per_year: float | None = None) -> float:
-    """Annualized Sharpe (risk-free rate = 0).
+def sharpe(returns: pd.Series, *, periods_per_year: float | None = None,
+           rf: pd.Series | float = 0.0) -> float:
+    """Annualized Sharpe. Default `rf=0` because our backtest returns are already
+    EXCESS returns.
 
-    If `periods_per_year` is None, it is inferred from the series' observed
-    calendar (`bars_per_year`); pass a value to override (e.g. for synthetic
-    arrays without dates, where it defaults to 252).
+    Our return series is `Σ w·pct_change(price) − costs`: pure capital gains, with
+    NO interest earned on collateral. In a funded prop account you don't earn rf on
+    collateral, so this IS the excess return — directly comparable to an industry
+    excess Sharpe (e.g. SG CTA Trend). Subtracting rf here would DOUBLE-COUNT.
+
+    `rf` is provided for series that DO include a risk-free component (a total-return
+    series): pass an annualized rate (scalar) or a daily rf Series to subtract.
     """
     r = returns.dropna()
+    if not (isinstance(rf, (int, float)) and rf == 0.0):
+        ppy0 = bars_per_year(r) if periods_per_year is None else periods_per_year
+        rf_daily = (rf / ppy0) if isinstance(rf, (int, float)) else rf.reindex(r.index).fillna(0.0)
+        r = r - rf_daily
     sd = r.std(ddof=0)
     if sd == 0 or np.isnan(sd):
         return 0.0
