@@ -216,9 +216,53 @@ diagnosticos_requeridos:
 # estados posibles: pre_registrado | testeado | viable | muerta | parked |
 #                   underpowered (indeterminado: los datos no resuelven el veredicto)
 score_prioridad: null
-estado: pre_registrado
-intentos_realizados: 0
-fecha_test: null
+estado: muerta                    # FALSADA in-sample: la concentración TOM no existe y el Sharpe no supera el nulo
+intentos_realizados: 1           # 1 ventana [-1,+3] × in-sample; el chequeo de robustez NO se disparó (no marginal)
+fecha_test: 2026-08-22
+
+# --- RESULTADO (registro post-ejecución; NO se toca FALSADOR/metrica_exito/
+#     resultado_esperado/benchmark_nulo/poder_estadistico, congelados) ---
+resultado:
+  runner: scripts/run_h003.py
+  reporte: results/H003/report.md
+  in_sample: "2011-09-19 → 2023-08-16"
+  holdout_tocado: false          # el holdout NO se tocó (no pasó in-sample)
+  existencia:                    # contraste de medias TOM vs no-TOM (bps/día, IC95 block bootstrap)
+    pooled: {diff_bps: -3.01, ic: [-11.52, 4.73], existe: false}
+    SPX500: {diff_bps: 2.77, ic: [-10.00, 12.16], existe: false}
+    GER40: {diff_bps: -6.66, ic: [-17.53, 4.19], existe: false}
+    JPN225: {diff_bps: -5.14, ic: [-20.76, 13.79], existe: false}
+  explotabilidad:
+    sharpe_neto: {"0.0": 0.278, "0.3": 0.262, "1.0": 0.225}   # 0.3 = primaria
+    tom_sharpe_ic95: [-0.316, 0.840]
+    nulo: {media: 0.106, p95: 0.522, p_valor_empirico: 0.291}
+  diagnosticos:
+    turnover_anual: 39.8
+    sharpe_zero_cost: 0.322
+    max_dd: -0.341
+    vol: 0.134
+    dd_sobre_vol: 2.5
+    max_gross_recortes: "5 de 534 días activos (0.9%); gross activo mediano 1.54× (≈ esperado ~1.15×); no es bug de lógica, es la inestabilidad del escalar ex-ante sobre serie flat 81% — Sharpe invariante, no afecta veredicto"
+veredicto:
+  global: muerta
+  existencia: >
+    NO existe: el test de alto poder (contraste de medias, ~3000 días) da pooled
+    -3.01 bps/día con IC que cruza 0 (GER40 y JPN225 negativos). La concentración
+    turn-of-the-month —la hipótesis TAL COMO ESTÁ ESCRITA— está AUSENTE en índices
+    2011-2023, consistente con la atenuación post-2000 documentada.
+  explotabilidad: >
+    NO explotable: Sharpe TOM +0.262 vs p95 del nulo +0.522 (p-valor 0.291 — el
+    29% de las estrategias de ventanas aleatorias lo baten). Está en la MEDIA del
+    nulo, no en su cola. Exactamente lo que resultado_esperado anticipó (exceso
+    sobre el nulo ≈ 0).
+  vs_expectativa: >
+    Confirmó la expectativa comprometida: el Sharpe absoluto (~0.26) es beta + tiempo
+    en mercado, no estacionalidad. El falsador RELATIVO (vs nulo) hizo su trabajo:
+    un falsador absoluto habría dejado pasar 0.26 como si fuera señal.
+  accion: >
+    H003 muerta, SIN variantes. El holdout NO se tocó (no pasó in-sample) y queda
+    intacto para futuras hipótesis. Familia estacionalidad: sin evidencia en este
+    panel de índices.
 enmiendas:
   # La ficha se fortalece SÓLO mientras nada se haya ejecutado. Tras el primer
   # test (fecha_test != null) el falsador y resultado_esperado se CONGELAN.

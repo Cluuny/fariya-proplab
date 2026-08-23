@@ -14,7 +14,7 @@ H005 = familia 5 (reversión a la media a nivel índice), H006 = familia 6
 | ID | Nombre (familia §2.5) | Familia | Estado | Nota |
 |---|---|---|---|---|
 | **H001** | Time-Series Momentum (TSMOM) | trend | **muerta** (falsada 2026-08-18) | Sharpe neto < 0.2 en ambas muestras sobre swap 0.3. Ficha en `hypotheses/archive/H001_tsmom.yaml`; reporte en `results/H001/report.md`. |
-| **H003** | Estacionalidad — turn-of-the-month | seasonality | **pre_registrada** (2026-08-18) | Largo en índices sólo en la ventana [-1,+3]; turnover muy bajo (mejor perfil de costo tras la lección de H001). **Holdout RESPETADO** (in-sample 2011→2023-08-16). Ficha: `hypotheses/H003_seasonality.yaml`. Falta implementar la señal. |
+| **H003** | Estacionalidad — turn-of-the-month | seasonality | **muerta** (falsada in-sample 2026-08-22) | El efecto NO existe en índices 2011-2023 (concentración pooled −3.0 bps/día, IC cruza 0) y el Sharpe (0.26) está en la media del nulo (p95 0.52, p-valor 0.29). **Holdout NO tocado** (no pasó in-sample) → intacto. Ficha `hypotheses/H003_seasonality.yaml`; reporte `results/H003/report.md`. |
 | H002 | Carry (diferencial de tasas) | carry | bloqueada (prerrequisito) | Requiere darle DIRECCIÓN al swap (diferencial con signo); con el swap unsigned actual, carry es estructuralmente incapaz de ganar. Prerrequisito en el camino crítico. |
 | H004 | Volatility risk premium | vol_premium | fuera de alcance por datos | Necesita opciones/vol implícita; nuestro panel es OHLC spot/CFD. Requiere otra fuente de datos antes de considerarse. |
 | H006 | Intermarket / macro | intermarket | en cola | Lead-lag entre mercados; cuidar el filtro 4 (¿por qué existe el edge?). |
