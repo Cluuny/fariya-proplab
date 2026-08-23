@@ -1,0 +1,157 @@
+# =============================================================================
+# H007 — Time-Series Momentum sobre el universo AMPLIADO (17 instrumentos)
+# Ficha de PRE-REGISTRO (protocolo anti-autoengaño §3.5/§3.6/§7.1).
+# El FALSADOR y la regla testeable se escriben ANTES de correr nada. La señal
+# `tsmom` (src/signals.py) NO se modifica: es la misma de H001.
+# =============================================================================
+
+id: H007
+
+fuente:
+  tipo: paper
+  cita: "Moskowitz, Ooi & Pedersen (2012), Time Series Momentum, Journal of Financial Economics"
+  url: "https://www.sciencedirect.com/science/article/abs/pii/S0304405X11002613"
+  fecha_publicacion: 2012
+
+# --- CLASIFICACIÓN ---
+familia: trend
+mecanismo: conductual + riesgo    # idéntico a H001
+explicacion_economica: >
+  Igual que H001: subreacción a información nueva (conductual) + prima por
+  transferencia de riesgo de los hedgers. Lo nuevo aquí NO es el mecanismo sino el
+  universo sobre el que se prueba.
+estructura: time_series
+direccionalidad: long_short
+
+relacion_con_H001: >
+  Segunda mirada al MISMO efecto sobre un universo ampliado (17 vs 9). NO es caza de
+  variantes: la ampliación se justificó por un argumento EXTERNO e independiente —la
+  atribución de la industria dice que los retornos de trend viven en renta fija y
+  materias primas, y el universo no las tenía— argumento que existiría aunque H001
+  nunca se hubiera corrido. La señal `tsmom` NO se modifica en absoluto (mismos
+  parámetros: lookback 12 meses de calendario, vol-inversa ex-ante a 8% de vol de
+  portafolio, rebalanceo mensual, cap max_gross).
+
+# El conteo de intentos de la FAMILIA trend, para el deflated Sharpe.
+intentos_familia_trend: 3         # 2 de H001 (12m × 2 muestras) + esta
+
+# --- OPERABILIDAD ---
+# Universo de 17 (Bloques 1-2): 5 majors + 6 cruces FX + 2 metales + 4 índices.
+# NOTA (docs/breadth-lessons.md): los 6 cruces FX son recombinaciones de los majors
+# (cero información nueva); la amplitud informativa real la dan EURCHF/HK50/plata.
+instrumentos: [EURUSD, GBPUSD, USDJPY, AUDUSD, USDCAD, EURJPY, GBPJPY, AUDJPY, EURAUD, GBPAUD, EURCHF, XAUUSD, XAGUSD, SPX500, GER40, JPN225, HK50]
+n_instrumentos: 17
+frecuencia_datos: diaria
+horizonte_holding_dias: 21        # rebalanceo mensual (idéntico a H001)
+datos_requeridos: [precio_ohlc]
+costo_datos_usd_mes: 0
+operable_en_prop: true
+razon_si_no: null
+
+# --- RESULTADO ORIGINAL / EVIDENCIA EXTERNA ---
+periodo_original: "1965-2009"
+sharpe_reportado: 1.2             # 58 futuros — NO es nuestro listón (menos amplitud)
+veredicto_externo: confirmado_con_degradacion
+replicaciones_encontradas:
+  - "AQR (2017): confirma OOS"
+  - "CXO (2019): degradación material post-2010"
+  - "H001 (2026-08, este proyecto): MUERTA neto sobre 9 instrumentos spot/CFD"
+
+# --- HIPÓTESIS TESTEABLE ---
+hipotesis: >
+  El signo del retorno a 12 meses predice positivamente el retorno del mes
+  siguiente, en el panel AMPLIADO de 17 instrumentos. La mayor amplitud efectiva
+  (N_eff 3.73 → 5.32) debería subir el Sharpe bruto respecto a H001.
+regla_entrada: "long si ret_12m > 0, short si ret_12m < 0 (idéntico a H001)"
+regla_salida: "rebalanceo mensual (idéntico a H001)"
+sizing: >
+  IDÉNTICO a H001 (src/signals.py::tsmom, sin cambios): vol-inversa (engine.rolling_vol,
+  gap-safe) con escalado GLOBAL ex-ante (escalar rodante, sólo info hasta t-1,
+  annualización con constante fija) a ~8% de vol de PORTAFOLIO; bruto ≤
+  config.MAX_GROSS_EXPOSURE (4).
+alineacion: >
+  IDÉNTICA a H001: unión de fechas de los 17; ffill del precio por instrumento;
+  el retorno que cruza un hueco se atribuye al día de reapertura; día no cotizado
+  rinde 0 (engine._asset_returns).
+universo_test:
+  # Dos muestras (misma lógica que H001), ajustadas a la cobertura real del universo 17.
+  muestra_A:
+    descripcion: "FX (majors + cruces) + oro + plata — histórico largo, INCLUYE 2008 (estrés)"
+    instrumentos: [EURUSD, GBPUSD, USDJPY, AUDUSD, USDCAD, EURJPY, GBPJPY, AUDJPY, EURAUD, GBPAUD, EURCHF, XAUUSD, XAGUSD]
+    periodo: "2005-2026"          # EURJPY arranca 2005; todos los cruces presentes desde ahí
+    nota: "13 instrumentos; test de estrés (2008)."
+  muestra_B:
+    descripcion: "los 17, todos con 12 meses de lookback completo"
+    instrumentos: [EURUSD, GBPUSD, USDJPY, AUDUSD, USDCAD, EURJPY, GBPJPY, AUDJPY, EURAUD, GBPAUD, EURCHF, XAUUSD, XAGUSD, SPX500, GER40, JPN225, HK50]
+    periodo: "2015-2026"          # GER40/HK50 arrancan 2013 → tradeable desde ~2014-2015
+    nota: "17 instrumentos; régimen moderno."
+costos: >
+  El motor aplica spread, slippage y swap. El swap es UNSIGNED (siempre resta sobre
+  |peso|) — conservador para trend, como en H001. Es la fricción que mató a H001.
+sensibilidad_costos:
+  swap_bp_dia: [0.0, 0.3, 1.0]
+  especificacion_primaria: 0.3    # el veredicto se dicta sobre ésta (idéntico a H001)
+  regla: >
+    Las tres se reportan; el veredicto por muestra se dicta con swap=0.3. Si el
+    veredicto cruza el falsador dentro del rango, es sobre el placeholder y se declara.
+holdout: exento                   # IDÉNTICO a H001
+holdout_razon: >
+  Misma exención que H001: replicación de un efecto publicado (MOP 1965-2009) SIN
+  tuneo sobre nuestros datos —la señal es literalmente la misma función que en H001—
+  y la ampliación del universo se justificó por un argumento externo independiente.
+  Ver hypotheses/HOLDOUT.md. (El holdout sagrado rige para hipótesis de DESCUBRIMIENTO
+  con libertad de especificación, p. ej. H003, no para esta replicación exacta.)
+
+# --- VEREDICTO Y EXPECTATIVA (comprometidos antes de correr) ---
+metrica_exito: >
+  Sharpe NETO (swap 0.3) > 0.4 EN UNA MUESTRA → viable en ese régimen, promueve.
+  Se evalúa por muestra. El Sharpe es invariante al apalancamiento.
+resultado_esperado:
+  bruto_esperado: [0.29, 0.36]
+  derivacion: >
+    H001 bruto 0.244/0.308 × 1.18 (techo Grinold-Kahn por N_eff 3.73 → 5.32). La
+    mejora de amplitud es modesta (los cruces FX son recombinaciones, ver
+    docs/breadth-lessons.md), así que se espera una subida pequeña del bruto.
+  neto_esperado: [0.12, 0.20]
+  veredicto_esperado: "muerta (neto por debajo o al borde del falsador)"
+zona_marginal:
+  rango: [0.2, 0.4]
+  decision: un_chequeo_robustez
+  regla: >
+    Si el Sharpe neto cae en [0.2, 0.4] se corre UNA variante pre-especificada
+    (lookback 6m) y se reporta el DEFLATED Sharpe. Ninguna variante más.
+  conteo_intentos: >
+    El deflated Sharpe se calcula con intentos_familia_trend = 3 (2 de H001 + ésta),
+    NO con 1. Subestimar el conteo infla el deflated Sharpe.
+FALSADOR: >
+  El mismo de H001: si el Sharpe NETO (swap 0.3) < 0.2 en una muestra, H007 se
+  descarta en ese régimen y NO se reintenta con variantes (salvo el único chequeo de
+  zona_marginal si cae en [0.2, 0.4]).
+
+# ==== EL PUNTO REAL DE ESTA HIPÓTESIS: calibrar el marco ====
+calibracion_del_marco:
+  proposito: >
+    Llevamos tres decisiones estratégicas apoyadas en Grinold-Kahn y amplitud
+    efectiva (qué instrumentos añadir, si pagar por datos de futuros, qué esperar de
+    cada hipótesis). El marco acaba de fallar un ~35% en su primera predicción
+    verificable (predijo N_eff 7, midió 5.32). H007 lo pone a prueba con coste casi
+    nulo: la señal y el runner ya existen.
+  criterio: >
+    Si el Sharpe BRUTO medido cae en [0.25, 0.40], el modelo de amplitud es
+    predictivo y se usa para decidir sobre datos de futuros pagos. Si cae FUERA de
+    ese rango, el marco NO predice y NO se gasta dinero apoyándose en él.
+  nota: >
+    Este criterio es INDEPENDIENTE del FALSADOR. H007 puede morir como hipótesis y
+    aun así calibrar el marco correctamente — de hecho es el resultado esperado.
+
+# --- DIAGNÓSTICOS DE PRIMERA LÍNEA (lección de H001) ---
+diagnosticos_requeridos:
+  - "turnover_anual = sum|Δw|/año"
+  - "sharpe_zero_cost (apply_costs=False) — distingue efecto débil de fricción"
+  - "max_dd / vol — el falsador de Sharpe es necesario pero NO suficiente"
+
+# --- GESTIÓN DE COLA ---
+score_prioridad: null
+estado: pre_registrado
+intentos_realizados: 0
+fecha_test: null
