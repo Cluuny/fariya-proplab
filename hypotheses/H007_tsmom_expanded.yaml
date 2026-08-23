@@ -194,35 +194,40 @@ resultado:
     turnover_anual: {A: "~", B: "~"}   # ver reporte
     dd_sobre_vol: "ver results/H007/report.md"
 veredicto:
+  # CORREGIDO (postmortem 2026-08-22, change h007-postmortem-corrections). No se
+  # tocan FALSADOR/resultado_esperado (congelados); esto es sólo el registro.
   falsador:
     global: muerta
-    detalle: >
-      Neto (swap 0.3) A=0.184 y B=0.040, ambos < 0.2 → muerta, sin variantes. El
-      chequeo de robustez no se disparó (ninguno en [0.2,0.4]). El swap unsigned
-      diario hunde el bruto bajo el falsador, igual que H001. Caveat honesto: A cruza
-      el falsador con el swap (0.354 a 0.0 bp → 0.184 a 0.3), pero nunca alcanza 0.4.
+    muestra_A: >
+      Neto 0.184 < 0.2 → muerta bajo la especificación primaria, PERO el veredicto es
+      SOBRE EL PLACEHOLDER de swap, no sobre la estrategia: cruza el falsador dentro
+      del rango (0.0 bp → 0.354 VIVA; 0.3 → 0.184; 1.0 → -0.212). Se invoca la
+      cláusula de sensibilidad al swap (sensibilidad_costos.regla).
+    muestra_B: >
+      Neto 0.040 < 0.2 → MUERE LIMPIA: ya a swap 0.0 es marginal (0.211, apenas sobre
+      0.2) y a 0.3 muere; no depende del placeholder.
   calibracion_del_marco:
+    veredicto: UNDERPOWERED
     prediccion_ficha: [0.29, 0.37]
     bruto_medido: {A: 0.370, B: 0.229}
-    contra_prediccion_ficha: "mixto (A en el borde, B por debajo)"
-    baseline_period_matched: {A: 0.246, B: 0.030}   # H001 recomputado a 2023-08-16
+    # Diferencia H007−H001 (period-matched, mismo corte) con SE de la DIFERENCIA
+    # (portafolios comparten instrumentos, ρ~0.85 → SE reducido). t ~ 1 en ambas.
+    poder: {muestra_A: {delta: 0.168, se: 0.13, t: 1.34}, muestra_B: {delta: 0.195, se: 0.19, t: 1.02}}
     hallazgo: >
-      La predicción de la ficha [0.29,0.37] estaba MAL DERIVADA: usó el bruto de H001
-      medido a 2026 (B=0.308), pero H007 corta en 2023-08-16 (holdout) y el B
-      period-matched es 0.030 (el trend moderno del universo-9 estaba ~muerto; el
-      0.308 venía casi todo de 2023-2026). Corregido el período, la ampliación ayudó
-      MÁS de lo predicho por √N_eff (B 0.030 → 0.229, +0.20 absoluto al pasar a 17).
-    veredicto: >
-      DIRECCIÓN correcta (más amplitud → más bruto), MAGNITUD no fiable (√N_eff
-      subestimó, y la predicción estaba contaminada por período). El marco es
-      DIRECCIONALMENTE útil pero NO predice magnitudes con precisión → tratar el caso
-      de datos de futuros como dirección (rates/commodities deberían ayudar), NO como
-      estimación puntual. Consistente con docs/breadth-lessons.md.
+      El test NO tenía poder para discriminar: ambas diferencias están a ~1 SE →
+      indistinguibles de ruido. La lectura previa ("dirección correcta, la amplitud
+      ayudó más de lo predicho") NO se sostiene. Además tiene una explicación más
+      simple: 6 de los 8 instrumentos añadidos son recombinaciones lineales de los
+      majors (cero información nueva, docs/breadth-lessons.md) y no pueden producir un
+      salto de ~7.6× en IR; cuando lo medido excede lo que la teoría permite, el
+      default es RUIDO, no que la teoría se quedara corta.
+    accion_marco: >
+      El test no pudo resolver si el marco predice. NO se usa para decidir sobre datos
+      de futuros — ni como estimación puntual NI como dirección.
   accion: >
-    H007 muerta, sin variantes. Holdout intacto (no pasó in-sample). La familia trend
-    queda en 5 intentos (convención). La lección de esta corrida es de MARCO, no de
-    hipótesis: la predicción puntual falló por mala derivación de período, pero la
-    dirección (amplitud ayuda) se sostuvo.
+    H007 muerta (B limpia; A sobre el placeholder de swap). Holdout intacto (no pasó
+    in-sample). Familia trend en 5 intentos (convención). La corrida NO calibró el
+    marco (underpowered): quedó como estaba, sin evidencia a favor ni en contra.
 enmiendas:
   - fecha: 2026-08-22
     tipo: pre_ejecucion            # intentos_realizados=0, fecha_test=null

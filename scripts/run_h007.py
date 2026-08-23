@@ -57,12 +57,34 @@ H001_A = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "XAUUSD"]
 H001_B = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "XAUUSD", "SPX500", "GER40", "JPN225"]
 
 
-def _gross(cols: list[str], start: str) -> float:
+def _gross_series(cols: list[str], start: str) -> pd.Series:
     px = _load(cols)
     w = signals.tsmom(px)
     live = w.abs().sum(axis=1) > 0
     s = max(pd.Timestamp(start), w.index[live][0])
-    return engine.sharpe(engine.backtest(px, w, apply_costs=False).loc[s:])
+    return engine.backtest(px, w, apply_costs=False).loc[s:]
+
+
+def _sharpe_se(r: pd.Series) -> tuple[float, float]:
+    """(Sharpe, SE) with SE ~ sqrt((1+S^2/2)/T_years)."""
+    s = engine.sharpe(r)
+    t = r.dropna().shape[0] / engine.bars_per_year(r)
+    return s, np.sqrt((1 + 0.5 * s * s) / t) if t > 0 else float("nan")
+
+
+def calibration_stats(sample: str, h001_cols: list[str], h007_cols: list[str]) -> dict:
+    """H001 vs H007 gross, with SE of the DIFFERENCE (correlated portfolios)."""
+    r1 = _gross_series(h001_cols, EVAL_START[sample])
+    r7 = _gross_series(h007_cols, EVAL_START[sample])
+    idx = r1.index.intersection(r7.index)
+    r1, r7 = r1.reindex(idx), r7.reindex(idx)
+    s1, se1 = _sharpe_se(r1)
+    s7, se7 = _sharpe_se(r7)
+    rho = float(r1.corr(r7))
+    se_d = float(np.sqrt(se1 ** 2 + se7 ** 2 - 2 * rho * se1 * se7))
+    d = s7 - s1
+    return {"h001": s1, "h007": s7, "delta": d, "rho": rho, "se_d": se_d,
+            "t": d / se_d if se_d else float("nan"), "T": r1.dropna().shape[0] / engine.bars_per_year(r1)}
 
 
 def run_sample(name: str, cols: list[str]) -> dict:
@@ -103,31 +125,31 @@ def main() -> int:
         print(f"{lbl:26} {r['gross']:>+7.3f} | {r['net_0.0']:>+8.3f} {r['net_0.3']:>+9.3f} "
               f"{r['net_1.0']:>+8.3f}   ({r['start']}→{r['end']})")
 
-    # ---- LECTURA 1: CALIBRACIÓN DEL MARCO (sobre el BRUTO) ----
-    # La predicción de la ficha [0.29,0.37] usó el bruto de H001 medido a 2026, pero
-    # H007 corta en 2023-08-16 (holdout). Ese desajuste de período CONTAMINA la
-    # comparación → añadimos el baseline PERIOD-MATCHED (H001 recomputado al mismo corte).
-    pm_A, pm_B = _gross(H001_A, "2004-06-01"), _gross(H001_B, "2015-01-01")
-    in_expected = all(EXPECTED_GROSS[0] <= res[n]["gross"] <= EXPECTED_GROSS[1] for n in "AB")
+    # ---- LECTURA 1: CALIBRACIÓN DEL MARCO — con PODER ESTADÍSTICO ----
+    # H001 vs H007 sobre el mismo período; comparten la mayoría de instrumentos
+    # (ρ~0.85) → SE de la diferencia pequeño, pero el test sigue sin poder.
+    cal = {n: calibration_stats(n, c1, c7) for n, c1, c7 in
+           (("A", H001_A, SAMPLE_A), ("B", H001_B, SAMPLE_B))}
     print("\n" + "=" * 74)
     print("LECTURA 1 — CALIBRACIÓN DEL MARCO (sobre el BRUTO; el punto real de esta corrida)")
-    print(f"  Predicción de la ficha: bruto ∈ [{EXPECTED_GROSS[0]}, {EXPECTED_GROSS[1]}] "
-          f"(H001-a-2026 × 1.194)")
-    print(f"  Medido H007:            bruto A={res['A']['gross']:+.3f}  B={res['B']['gross']:+.3f}")
-    print(f"  ¿Dentro de [{EXPECTED_GROSS[0]},{EXPECTED_GROSS[1]}]? A={'sí' if EXPECTED_GROSS[0]<=res['A']['gross']<=EXPECTED_GROSS[1] else 'no'}  "
-          f"B={'sí' if EXPECTED_GROSS[0]<=res['B']['gross']<=EXPECTED_GROSS[1] else 'no'}  (mixto)")
-    print(f"\n  Baseline PERIOD-MATCHED (H001 recomputado a {IN_SAMPLE_END}): A={pm_A:.3f}  B={pm_B:.3f}")
-    print(f"  → la predicción de la ficha estaba MAL DERIVADA: usó H001-a-2026 (B=0.308),")
-    print(f"    pero el B period-matched es {pm_B:.3f} (el trend moderno del universo-9 estaba ~muerto).")
-    print(f"  Predicción period-matched (×1.194): A={pm_A*1.194:.3f}  B={pm_B*1.194:.3f}")
-    print(f"  Bruto real H007:                    A={res['A']['gross']:.3f}  B={res['B']['gross']:.3f}")
-    print("\n  VEREDICTO DE CALIBRACIÓN:")
-    print("  · Dirección (más amplitud → más bruto): CORRECTA — el bruto SUBIÓ al ampliar")
-    print(f"    (B period-matched {pm_B:.3f} → {res['B']['gross']:.3f}, +{res['B']['gross']-pm_B:.2f} absoluto).")
-    print("  · Magnitud (×1.194): NO fiable — la amplitud ayudó MÁS de lo predicho, y la")
-    print("    predicción de la ficha estaba contaminada por el desajuste de período.")
-    print("  → El marco es DIRECCIONALMENTE útil pero NO predice magnitudes con precisión:")
-    print("    tratar el caso de datos de futuros como dirección, NO como estimación puntual.")
+    print(f"  Predicción de la ficha: bruto ∈ [{EXPECTED_GROSS[0]}, {EXPECTED_GROSS[1]}]")
+    print(f"  Medido H007: bruto A={res['A']['gross']:+.3f}  B={res['B']['gross']:+.3f}")
+    print(f"\n  ¿Ayudó la amplitud? Diferencia H007−H001 (period-matched), con SE de la diferencia:")
+    print(f"  {'Muestra':8} {'T':>5} {'H001':>7} {'H007':>7} {'Δ':>7} {'ρ':>5} {'SE(Δ)':>6} {'t':>5}")
+    for n in "AB":
+        c = cal[n]
+        print(f"  {n:8} {c['T']:>4.1f}y {c['h001']:>+7.3f} {c['h007']:>+7.3f} {c['delta']:>+7.3f} "
+              f"{c['rho']:>5.2f} {c['se_d']:>6.2f} {c['t']:>5.2f}")
+    maxt = max(abs(cal['A']['t']), abs(cal['B']['t']))
+    print(f"\n  VEREDICTO DE CALIBRACIÓN: UNDERPOWERED (|t| ≤ {maxt:.2f} ~ 1 SE en ambas).")
+    print("  El test NO pudo resolver si el marco predice: las diferencias son")
+    print("  indistinguibles de ruido. NO se usa para decidir sobre datos de futuros —")
+    print("  ni como estimación puntual NI como dirección.")
+    print("  (Y la lectura previa 'la amplitud ayudó MÁS de lo predicho' tiene una")
+    print("   explicación más simple: 6 de los 8 añadidos son recombinaciones lineales")
+    print("   sin información nueva y no pueden producir un salto de 7.6× en IR; cuando")
+    print("   lo medido excede lo que la teoría permite, el default es RUIDO, no que la")
+    print("   teoría se quedara corta.)")
 
     # ---- LECTURA 2: FALSADOR (sobre el NETO 0.3) ----
     verd = {}
@@ -136,18 +158,30 @@ def main() -> int:
         verd[n] = "viable_insample" if s >= SUCCESS else ("muerta" if s < FALSIFIER else "marginal")
     glob = ("viable_insample" if "viable_insample" in verd.values()
             else "muerta" if all(v == "muerta" for v in verd.values()) else "marginal")
+    # Placeholder-sensitivity: the verdict is placeholder-dependent only if, at swap
+    # 0.0, the strategy is COMFORTABLY above the falsifier (>0.2+margin, i.e. not just
+    # marginal) yet dies under the primary swap. A net_0.0 barely above 0.2 (marginal)
+    # dies clean — its death is weakness, not the placeholder.
+    CLEAR_MARGIN = 0.10
+    for n in "AB":
+        clearly_alive0 = res[n]["net_0.0"] >= FALSIFIER + CLEAR_MARGIN
+        dead_primary = res[n]["net_0.3"] < FALSIFIER
+        res[n]["placeholder_dependent"] = clearly_alive0 and dead_primary
     print("\nLECTURA 2 — FALSADOR (sobre el NETO 0.3; INDEPENDIENTE de la calibración)")
-    print(f"  Neto A={res['A']['net_0.3']:+.3f} → {verd['A']}   Neto B={res['B']['net_0.3']:+.3f} → {verd['B']}")
+    for n, lbl in (("A", "A"), ("B", "B")):
+        r = res[n]
+        note = ("  ← cruza el falsador con el swap (0.0→%.3f VIVA, 0.3→%.3f muerta): veredicto "
+                "SOBRE EL PLACEHOLDER, no sobre la estrategia" % (r["net_0.0"], r["net_0.3"])
+                if r["placeholder_dependent"] else "  (muere limpia)")
+        print(f"  Neto {lbl}={r['net_0.3']:+.3f} → {verd[n]}{note}")
     print(f"  Veredicto de hipótesis: {glob.upper()}   (esperado: muerta)")
-    print("\n  NOTA: las dos lecturas son independientes. Un bruto en banda + neto < 0.2 = "
-          "MARCO VALIDADO e HIPÓTESIS MUERTA a la vez.")
     print("=" * 74)
 
-    _write_report(res, pm_A, pm_B, verd, glob)
+    _write_report(res, cal, verd, glob, maxt)
     return 0
 
 
-def _write_report(res, pm_A, pm_B, verd, glob) -> None:
+def _write_report(res, cal, verd, glob, maxt) -> None:
     L = [
         "# Reporte de prueba — H007 (TSMOM sobre universo ampliado, 17)",
         "",
@@ -171,35 +205,45 @@ def _write_report(res, pm_A, pm_B, verd, glob) -> None:
         "",
         "## LECTURA 1 — Calibración del marco (sobre el BRUTO)  ← el punto real",
         "",
-        f"- **Predicción de la ficha** (antes de correr): bruto ∈ **[{EXPECTED_GROSS[0]}, {EXPECTED_GROSS[1]}]** "
-        f"(H001-a-2026 0.244/0.308 × 1.194 por N_eff 3.73→5.32).",
-        f"- **Medido H007**: bruto A = **{res['A']['gross']:+.3f}**, B = **{res['B']['gross']:+.3f}** → "
-        "resultado **mixto** contra esa predicción (A en el borde superior, B por debajo).",
+        f"- **Predicción de la ficha** (congelada): bruto ∈ **[{EXPECTED_GROSS[0]}, {EXPECTED_GROSS[1]}]**.",
+        f"- **Medido H007**: bruto A = {res['A']['gross']:+.3f}, B = {res['B']['gross']:+.3f}.",
         "",
-        "**Pero la predicción de la ficha estaba MAL DERIVADA**: usó el bruto de H001 medido "
-        f"a 2026, mientras H007 corta en {IN_SAMPLE_END} (holdout). Baseline **period-matched** "
-        f"(H001 recomputado al mismo corte): A = **{pm_A:.3f}**, B = **{pm_B:.3f}** — el trend "
-        "moderno del universo-9 estaba ~muerto (B 0.03); el 0.308 de la ficha venía casi todo de "
-        "2023-2026, que el holdout excluye.",
+        "**¿Ayudó la amplitud? Diferencia H007−H001 (period-matched, mismo corte) con el SE de "
+        "la DIFERENCIA** (los portafolios comparten la mayoría de instrumentos, ρ~0.85, lo que "
+        "reduce el SE):",
         "",
-        f"Predicción period-matched (×1.194): A={pm_A*1.194:.3f}, B={pm_B*1.194:.3f}. Bruto real: "
-        f"A={res['A']['gross']:.3f}, B={res['B']['gross']:.3f}.",
+        "| Muestra | T | H001 | H007 | Δ bruto | ρ | SE(Δ) | t |",
+        "|---|---|---|---|---|---|---|---|",
+    ] + [
+        f"| {n} | {cal[n]['T']:.1f}y | {cal[n]['h001']:+.3f} | {cal[n]['h007']:+.3f} | "
+        f"{cal[n]['delta']:+.3f} | {cal[n]['rho']:.2f} | {cal[n]['se_d']:.2f} | **{cal[n]['t']:.2f}** |"
+        for n in "AB"
+    ] + [
         "",
-        "**Veredicto de calibración:**",
-        f"- **Dirección CORRECTA**: más amplitud → más bruto (B period-matched {pm_B:.3f} → "
-        f"{res['B']['gross']:.3f}, +{res['B']['gross']-pm_B:.2f} absoluto al ampliar a 17).",
-        "- **Magnitud NO fiable**: la amplitud ayudó MÁS de lo predicho por √N_eff, y la "
-        "predicción de la ficha estaba contaminada por el desajuste de período.",
-        "- → El marco es **direccionalmente útil pero no predice magnitudes con precisión**. "
-        "Tratar el caso de datos de futuros como una **dirección** (rates/commodities deberían "
-        "ayudar), NO como una estimación puntual de Sharpe. Confirma la humildad de "
-        "`docs/breadth-lessons.md`: N_eff sobreestima y el marco no es de precisión.",
+        f"**Veredicto de calibración: UNDERPOWERED** (|t| ≤ {maxt:.2f}, ~1 SE en ambas muestras). "
+        "El test **no pudo resolver** si el marco predice: las diferencias son indistinguibles de "
+        "ruido. **NO se usa para decidir sobre datos de futuros — ni como estimación puntual NI "
+        "como dirección.**",
+        "",
+        "Corrección de la lectura previa: decir que *\"la amplitud ayudó MÁS de lo predicho\"* era "
+        "un error. 6 de los 8 instrumentos añadidos son **recombinaciones lineales** de los majors "
+        "(cero información nueva, `docs/breadth-lessons.md`) y no pueden producir un salto de ~7.6× "
+        "en IR. Cuando un efecto medido excede tanto lo que la teoría permite, la explicación por "
+        "defecto es **ruido**, no que la teoría se quedara corta.",
         "",
         "## LECTURA 2 — Falsador (sobre el NETO 0.3, independiente)",
         "",
-        f"- Neto A = {res['A']['net_0.3']:+.3f} → {verd['A']}; Neto B = {res['B']['net_0.3']:+.3f} → {verd['B']}.",
-        f"- **Veredicto de hipótesis: {glob.upper()}** (esperado: muerta). El swap unsigned "
-        "diario hunde el bruto bajo el falsador, igual que en H001.",
+    ] + [
+        (f"- **Muestra {n}** = {res[n]['net_0.3']:+.3f} → muerta bajo la especificación primaria, "
+         f"**PERO el veredicto es sobre el PLACEHOLDER de swap, no sobre la estrategia**: cruza el "
+         f"falsador dentro del rango (0.0→{res[n]['net_0.0']:+.3f} VIVA · 0.3→{res[n]['net_0.3']:+.3f} "
+         f"muerta · 1.0→{res[n]['net_1.0']:+.3f}). Se invoca la cláusula de sensibilidad al swap."
+         if res[n]["placeholder_dependent"] else
+         f"- **Muestra {n}** = {res[n]['net_0.3']:+.3f} → **muere limpia**: ya a swap 0.0 es marginal "
+         f"({res[n]['net_0.0']:+.3f}, apenas sobre 0.2) y a 0.3 muere; no depende del placeholder.")
+        for n in "AB"
+    ] + [
+        f"- **Veredicto de hipótesis: {glob.upper()}** (esperado: muerta).",
         "",
         "## Diagnósticos",
         "",
