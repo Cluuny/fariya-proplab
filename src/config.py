@@ -21,15 +21,28 @@ RESULTS = ROOT / "results"
 # whole point is to lower volatility by decorrelation). Replaced by JPN225 (Nikkei,
 # Asia) and BRENT (energy) for cross-class / cross-geography diversification.
 INSTRUMENTS: tuple[str, ...] = (
+    # FX majors (comparten el factor USD)
     "EURUSD",
     "GBPUSD",
     "USDJPY",
     "AUDUSD",
     "USDCAD",
+    # FX crosses (decorrelacionan del factor USD) — auditoría Bloque 1
+    "EURJPY",
+    "GBPJPY",
+    "AUDJPY",
+    "EURAUD",
+    "GBPAUD",
+    "EURCHF",
+    # Metales
     "XAUUSD",
+    "XAGUSD",
+    # Índices de renta variable (geográficamente diversos)
     "SPX500",
+    "US30",
     "GER40",
     "JPN225",
+    "HK50",
 )
 # BRENT retirado del universo activo: cobertura diaria de Dukascopy sparse (~168
 # obs/año, ~1421 días hábiles faltantes en 15 años → inusable). Se conserva su
@@ -47,11 +60,20 @@ DUKASCOPY_SYMBOLS: dict[str, str] = {
     "USDJPY": "USDJPY",
     "AUDUSD": "AUDUSD",
     "USDCAD": "USDCAD",
+    "EURJPY": "EURJPY",
+    "GBPJPY": "GBPJPY",
+    "AUDJPY": "AUDJPY",
+    "EURAUD": "EURAUD",
+    "GBPAUD": "GBPAUD",
+    "EURCHF": "EURCHF",
     "XAUUSD": "XAUUSD",
+    "XAGUSD": "XAGUSD",
     "SPX500": "USA500IDXUSD",
+    "US30": "USA30IDXUSD",
     "GER40": "DEUIDXEUR",
     "JPN225": "JPNIDXJPY",
-    "BRENT": "BRENTCMDUSD",
+    "HK50": "HKGIDXHKD",
+    "BRENT": "BRENTCMDUSD",  # retirado del universo activo (auditoría: energía esparsa)
 }
 
 # Price scale factor per instrument for the .bi5 integer prices (verified for
@@ -60,8 +82,10 @@ DUKASCOPY_SYMBOLS: dict[str, str] = {
 # displayed price level, not any downstream metric.
 DUKASCOPY_POINT: dict[str, float] = {
     "EURUSD": 1e5, "GBPUSD": 1e5, "AUDUSD": 1e5, "USDCAD": 1e5,
-    "USDJPY": 1e3, "XAUUSD": 1e3,
-    "SPX500": 1e3, "GER40": 1e3, "JPN225": 1e3, "BRENT": 1e3,
+    "EURAUD": 1e5, "GBPAUD": 1e5, "EURCHF": 1e5,
+    "USDJPY": 1e3, "EURJPY": 1e3, "GBPJPY": 1e3, "AUDJPY": 1e3,
+    "XAUUSD": 1e3, "XAGUSD": 1e3,
+    "SPX500": 1e3, "US30": 1e3, "GER40": 1e3, "JPN225": 1e3, "HK50": 1e3, "BRENT": 1e3,
 }
 
 # --- Data quality validation ---

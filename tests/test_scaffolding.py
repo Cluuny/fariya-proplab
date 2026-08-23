@@ -14,8 +14,11 @@ def test_directory_structure_exists():
 
 
 def test_config_universe():
-    assert len(config.INSTRUMENTS) == 9  # BRENT retirado (cobertura sparse)
-    assert "EURUSD" in config.INSTRUMENTS
+    # 18 tras la expansión (Bloque 2): 5 majors + 6 cruces FX + 2 metales + 5 índices.
+    # BRENT y energía retirados (auditoría: cobertura sparse). Cada uno mapeado a Dukascopy.
+    assert len(config.INSTRUMENTS) == 18
+    assert "EURUSD" in config.INSTRUMENTS and "EURCHF" in config.INSTRUMENTS
+    assert all(sym in config.DUKASCOPY_SYMBOLS for sym in config.INSTRUMENTS)
     assert config.ANOMALOUS_RETURN_SIGMA == 5.0
 
 
