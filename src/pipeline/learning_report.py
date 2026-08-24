@@ -57,7 +57,8 @@ def _calibracion(conn) -> list[dict]:
     """Filas realmente CORRIDAS a un veredicto de Sharpe con esperado y medido."""
     sql = """
         SELECT id, clase_de_dato AS clase, bruto_esperado, bruto_medido,
-               (bruto_esperado - bruto_medido) AS sesgo
+               (bruto_esperado - bruto_medido) AS sesgo,
+               COALESCE(ancla_defectuosa, 0) AS ancla_defectuosa
         FROM hipotesis
         WHERE fecha_test IS NOT NULL
           AND bruto_esperado IS NOT NULL
@@ -165,21 +166,27 @@ def report(conn) -> str:
     if not cal:
         lines.append("_Sin corridas con ambos números todavía._")
     else:
-        lines.append("| id | clase | bruto_esperado | bruto_medido | sesgo (esp−med) |")
-        lines.append("|---|---|---|---|---|")
+        lines.append("| id | clase | bruto_esperado | bruto_medido | sesgo (esp−med) | ancla |")
+        lines.append("|---|---|---|---|---|---|")
         for r in cal:
+            ancla = "DEFECTUOSA" if r["ancla_defectuosa"] else "ok"
             lines.append(f"| {r['id']} | {r['clase']} | {r['bruto_esperado']:.2f} | "
-                         f"{r['bruto_medido']:.3f} | {r['sesgo']:+.3f} |")
-        sesgo_medio = sum(r["sesgo"] for r in cal) / len(cal)
-        sobre = sum(1 for r in cal if r["sesgo"] > 0)
+                         f"{r['bruto_medido']:.3f} | {r['sesgo']:+.3f} | {ancla} |")
+        sesgo_todos = sum(r["sesgo"] for r in cal) / len(cal)
+        limpias = [r for r in cal if not r["ancla_defectuosa"]]
+        sesgo_limpio = (sum(r["sesgo"] for r in limpias) / len(limpias)) if limpias else None
         lines.append("")
-        signo = "SOBREestimamos" if sesgo_medio > 0 else "SUBestimamos"
-        lines.append(f"Sesgo medio (esperado − medido) = **{sesgo_medio:+.3f}** → en promedio "
-                     f"**{signo}** el bruto. {sobre}/{len(cal)} corridas por encima de lo medido.")
+        lines.append(f"Sesgo medio con TODAS ({len(cal)}): **{sesgo_todos:+.3f}**. "
+                     f"Con ancla limpia ({len(limpias)}): "
+                     f"{('**%+.3f**' % sesgo_limpio) if sesgo_limpio is not None else '**n/a**'}.")
         lines.append("")
-        lines.append("Lectura honesta: el sesgo lo domina H001 (Grinold-Kahn predijo un edge "
-                     "de trend que no estaba); H007 quedó on-target pero UNDERPOWERED (no "
-                     "informa). La conclusión NO es 'todo inflado' sino 'las expectativas de "
-                     "trend por amplitud estaban infladas'.")
+        n_def = sum(1 for r in cal if r["ancla_defectuosa"])
+        lines.append(f"**NO HAY CALIBRACIÓN TODAVÍA.** De {len(cal)} puntos, {n_def} tienen "
+                     "**ancla defectuosa** (bruto_esperado derivado del 1.2 de MOP mal citado, "
+                     "D2 en docs/extraction_defects.md), y el único de ancla limpia (H003) es "
+                     "una expectativa de beta/estacionalidad, no un ancla Grinold-Kahn de trend. "
+                     "Con ≤1 punto limpio no se puede afirmar que el marco sobre/subestime: el "
+                     "+0.057 previo NO era evidencia limpia. La calibración empieza a existir "
+                     "cuando el pipeline produzca corridas con ancla citable.")
     lines.append("")
     return "\n".join(lines)

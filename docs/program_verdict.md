@@ -48,6 +48,16 @@ sin llegar a veredicto de familia; no cuenta entre las ocho.)
    comprometidas refutadas: carry pasó el cribado que se esperaba que fallara; H007 salió
    underpowered).
 
+   **Corrección de procedencia (D2, 2026-08-24, change provenance-corrections):** las
+   expectativas de trend de H001 (0.40) y H007 (0.29-0.37) se anclaron en el Sharpe ~1.2 de
+   Moskowitz-Ooi-Pedersen, que estaba MAL CITADO (está en Figure 2, no en texto; el período
+   correcto es 1985-2009, no 1965-2009). Ese ancla defectuosa contamina el sesgo de
+   calibración que se había reportado (+0.057): NO era evidencia limpia de que el marco
+   Grinold-Kahn sobreestime. **Conclusión honesta: no hay calibración de expectativas
+   todavía** — con dos anclas defectuosas y una corrida underpowered, la métrica empieza a
+   existir sólo cuando el pipeline produzca corridas con ancla citable
+   (`docs/extraction_defects.md`, reporte del pipeline). El VEREDICTO de las ocho NO cambia.
+
 ## Los dos hallazgos empíricos PROPIOS (1.3)
 
 Mediciones originales sobre un mercado (cripto perp) con literatura pública escasa. No son

@@ -7,6 +7,11 @@ anti-alucinación (la parte testeable y crítica; la llamada al LLM es el `seam`
       a null. Los LLM inventan Sharpes con facilidad.
   (b) sin FALSADOR escribible, el registro se RECHAZA por validación de esquema. Impide
       acumular "ideas interesantes" sin criterio de muerte.
+  (c) REGLA DE FIGURAS (D2, change provenance-corrections): si un valor numérico SÓLO
+      aparece en una figura/gráfico (no en texto ni tabla), se emite null y se marca
+      `requiere_lectura_manual: true` con nota de qué figura lo contiene. NO se transcribe
+      un número leído de un gráfico como si fuera una cita. (Caso real: el Sharpe ~1.2 de
+      Moskowitz-Ooi-Pedersen está en Figure 2.)
 
 DECISIÓN DE ALCANCE: la extracción con LLM (PDF→dict) es el `seam` — se invoca con el Agent
 tool / un modelo pequeño en producción. Aquí se implementa y testea la VALIDACIÓN, que es lo
@@ -42,13 +47,16 @@ def validate_extraction(raw: dict) -> ExtractionResult:
     ficha = dict(raw)
     dropped = []
 
-    # (a) cada numérico exige cita
+    # (a) cada numérico exige cita; (c) si se cae por falta de cita (típicamente porque
+    # sólo está en una figura), se marca requiere_lectura_manual y NO se inventa el número.
     for fld, cita_fld in NUMERIC_FIELDS_REQUIRING_CITATION.items():
         if ficha.get(fld) is not None:
             cita = ficha.get(cita_fld)
             if not (isinstance(cita, str) and cita.strip()):
                 ficha[fld] = None
                 dropped.append(fld)
+    if dropped:
+        ficha["requiere_lectura_manual"] = 1
 
     # (b) sin falsador escribible → rechazo
     fals = ficha.get("falsador")

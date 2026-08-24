@@ -38,7 +38,8 @@ def render(candidates: list[dict]) -> str:
         return "Compuerta humana: no hay candidatos listos para revisión."
     lines = [f"Compuerta humana — {len(candidates)} candidato(s), aprobar UNO:", ""]
     for i, c in enumerate(candidates, 1):
+        manual = "  ⚠ requiere_lectura_manual (numérico sólo en figura)" if c.get("requiere_lectura_manual") else ""
         lines.append(f"{i}. {c['id']} — {c.get('titulo','')} "
                      f"[{c.get('clase_de_dato','?')} · {c.get('tipo_de_fuente','?')} · "
-                     f"bruto {c.get('bruto_reportado','?')}]")
+                     f"bruto {c.get('bruto_reportado','?')}]{manual}")
     return "\n".join(lines)

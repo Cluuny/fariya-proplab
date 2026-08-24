@@ -52,8 +52,32 @@ MANUALES** — precisamente lo que un conjunto de validación debe hacer.
   (p. ej. 4 días aleatorios), no contra cero — la lección de H003 ya codificada como eje
   crítico del adversario.
 
-## Estado
+## Estado (tras change provenance-corrections, 2026-08-24)
 
-Ninguno bloquea automatizar la extracción; D1/D2 corrigen procedencia de fichas propias,
-D3/D4 son reglas de operación ya codificadas (regla a; eje crítico del adversario). La
-extracción se declara VÁLIDA para la corrida real (change siguiente, con API key).
+| defecto | estado |
+|---|---|
+| D1 período MOP 1965 → 1985-2009 | **CORREGIDO** (fichas H001/H007 + enmiendas; registro de aprendizaje) |
+| D2 Sharpe 1.2 sin cita → null | **CORREGIDO** + **regla (c) de figuras** codificada (abajo) |
+| D3 falsador inútil | mitigado por compuerta humana (el esquema no lo atrapa; requiere lectura) |
+| D4 benchmark = beta | cubierto por el eje crítico `benchmark_cero` del adversario |
+
+**Regla nueva (c) — numéricos que sólo están en figuras** (`extract.py`): si un valor sólo
+aparece en una figura/gráfico (no en texto ni tabla), se emite **null** y se marca
+`requiere_lectura_manual: true` con nota de qué figura lo contiene. Visible en el reporte de
+la compuerta humana (estación 7). Test que verifica null+flag (no valor inventado).
+
+**Registro de aprendizaje:** H001 y H007 tienen `ancla_defectuosa: 1` (su bruto_esperado se
+derivó del 1.2 mal citado). El reporte recalcula el sesgo de calibración con y sin ellas y
+concluye **NO HAY CALIBRACIÓN TODAVÍA** (el +0.057 previo no era evidencia limpia del marco).
+
+## Nota de honestidad sobre la validación misma
+
+El extractor y el adversario fueron el **MISMO modelo** en la corrida de validación
+(`docs/extraction_validation.md`). Que el adversario rechazara TOM (beta) y OFI
+(contemporáneo) es buena señal, pero **ambos ejes estaban en la lista que le dimos**, y esa
+lista salió de errores que YA conocíamos. **NO está demostrado que el adversario detecte un
+fallo NO anticipado.** Ese test sólo llega con papers nuevos.
+
+**MITIGACIÓN COMPROMETIDA:** los primeros **20 candidatos** de la corrida real se leen
+ÍNTEGROS por el operador, aunque el adversario diga KEEP. Recién después se confía en el
+filtro adversario sin lectura completa.

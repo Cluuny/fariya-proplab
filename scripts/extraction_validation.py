@@ -22,6 +22,8 @@ EXTRACTED = {
         "n_instrumentos": 58, "cita_n_instrumentos": "Abstract; §1 ('58 in total')",
         "bruto_reportado": None,  # el Sharpe del factor diversificado está en Figure 2 (gráfico), no en texto extraíble
         "cita_bruto": None,       # → por regla (a) va null; NO se inventa 1.2
+        "requiere_lectura_manual": 1,  # regla (c): el ~1.2 está SÓLO en Figure 2 → lectura manual
+        "nota_figura": "Sharpe ~1.2 del factor diversificado en Figure 2 (Panel A)",
         "periodo_original": "1985-2009 (primario; 'report results post-1985')",
         "cita_periodo": "§2.3 p.15; §4.1 p.16 ('sample period 1985 to 2009')",
         "falsador": "si el Sharpe NETO (tras costes) < 0.2 en nuestro universo/período, se descarta y no se reintenta con variantes",
