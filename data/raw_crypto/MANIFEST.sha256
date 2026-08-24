@@ -1,4 +1,10 @@
 # MANIFEST.sha256 — data/raw_crypto (versionado en git; los .zip NO).
 # <sha256>  <key relativo a data/raw_crypto/>
 522c7cc5e73632ce8f375546323450a966cf8eb58509e68ba66cb77503fb6617  futures/um/daily/aggTrades/BTCUSDT/BTCUSDT-aggTrades-2024-01-02.zip
+ac018ff505dc9a938da4bb13f134589c7f2992449b7e3f1e8a482b4a684ef67a  futures/um/daily/aggTrades/BTCUSDT/BTCUSDT-aggTrades-2024-02-03.zip
+79fcbd8c45cb95fc966234d856579174b89002c7e6105fa191333c50b7aa35ae  futures/um/daily/aggTrades/BTCUSDT/BTCUSDT-aggTrades-2024-02-12.zip
+705291994eb9a555cc7a11d038659ff7630c303c8ced5338eb57051732a2e666  futures/um/daily/aggTrades/BTCUSDT/BTCUSDT-aggTrades-2024-03-05.zip
 a90b5a86f55456db60171b51dba1585dd107c6b7030bef6f9bfe0f85e79f2f8b  futures/um/daily/bookTicker/BTCUSDT/BTCUSDT-bookTicker-2024-01-02.zip
+667924c7b0175b1dbb4d2062052e714de1392d940c1fffe138d8488ba58a5935  futures/um/daily/bookTicker/BTCUSDT/BTCUSDT-bookTicker-2024-02-03.zip
+5e5252dfab974175a91905ec1c2a5ab7a4d8915ff6962c5ff49dec10e80b20ab  futures/um/daily/bookTicker/BTCUSDT/BTCUSDT-bookTicker-2024-02-12.zip
+cd8ddb7f38cefaa928c2e47a69c5147109251df5ed9d1735e088d99a5c12fa40  futures/um/daily/bookTicker/BTCUSDT/BTCUSDT-bookTicker-2024-03-05.zip
