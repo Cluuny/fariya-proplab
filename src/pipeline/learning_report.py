@@ -29,6 +29,19 @@ def _rows_por_clase(conn) -> list[dict]:
     return [dict(r) for r in conn.execute(sql).fetchall()]
 
 
+def _rows_por_frecuencia(conn) -> list[dict]:
+    sql = """
+        SELECT COALESCE(frecuencia, 'EOD') AS frecuencia,
+               COUNT(*) AS n,
+               SUM(CASE WHEN estado IN ('viable','en_cola','pre_registrado')
+                        THEN 1 ELSE 0 END) AS vivas
+        FROM hipotesis
+        GROUP BY COALESCE(frecuencia, 'EOD')
+        ORDER BY n DESC, frecuencia ASC
+    """
+    return [dict(r) for r in conn.execute(sql).fetchall()]
+
+
 def _calibracion(conn) -> list[dict]:
     """Filas realmente CORRIDAS a un veredicto de Sharpe con esperado y medido."""
     sql = """
@@ -71,6 +84,15 @@ def report(conn) -> str:
                  "(el sesgo de fuente única que el pipeline existe para corregir). "
                  "**La tasa de supervivencia se MIDE por clase, no se asume**: no se "
                  "favorece a macro/flujo por parecer 'las buenas'.")
+    lines.append("")
+
+    # distribución por frecuencia (intradía vs EOD).
+    lines.append("## Distribución por frecuencia")
+    lines.append("")
+    lines.append("| frecuencia | n | vivas |")
+    lines.append("|---|---|---|")
+    for r in _rows_por_frecuencia(conn):
+        lines.append(f"| {r['frecuencia']} | {r['n']} | {r['vivas']} |")
     lines.append("")
 
     # 3: calibración.

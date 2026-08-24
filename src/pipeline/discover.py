@@ -23,6 +23,12 @@ import xml.etree.ElementTree as ET
 
 ARXIV_API = "http://export.arxiv.org/api/query"
 ARXIV_CATS = ("q-fin.PM", "q-fin.ST", "q-fin.TR")
+# q-fin.TR (Trading & Market Microstructure) está infrarrepresentado en el barrido por
+# categoría; una consulta por TÉRMINOS lo rescata (order flow, LOB, price impact, VPIN...).
+MICROSTRUCTURE_TERMS = (
+    "order flow imbalance", "market microstructure", "limit order book",
+    "price impact", "VPIN", "trade classification", "high frequency",
+)
 RSS_FEEDS = {
     "alpha_architect": "https://alphaarchitect.com/feed/",
     "cxo": "https://www.cxoadvisory.com/feed/",
@@ -38,8 +44,15 @@ def _http_get(url: str, timeout: float = 20.0) -> str:
 
 
 # ---------------------------------------------------------------- arXiv (Atom)
-def arxiv_query_url(cats=ARXIV_CATS, *, max_results: int = 50, start: int = 0) -> str:
-    query = "+OR+".join(f"cat:{c}" for c in cats)
+def arxiv_query_url(cats=ARXIV_CATS, *, terms=None, max_results: int = 50, start: int = 0) -> str:
+    """Build an arXiv query URL. `cats` OR'd as cat: filters; optional `terms` OR'd as
+    quoted all: phrase searches (used for the microstructure sweep of q-fin.TR)."""
+    import urllib.parse
+
+    clauses = [f"cat:{c}" for c in cats]
+    for t in (terms or ()):
+        clauses.append('all:"' + urllib.parse.quote(t) + '"')
+    query = "+OR+".join(clauses)
     return (
         f"{ARXIV_API}?search_query={query}&start={start}&max_results={max_results}"
         "&sortBy=submittedDate&sortOrder=descending"
@@ -75,8 +88,8 @@ def _arxiv_id(url: str) -> str:
     return "arxiv:" + tail.split("v")[0] if tail else "arxiv:unknown"
 
 
-def fetch_arxiv(cats=ARXIV_CATS, *, max_results: int = 50) -> list[dict]:
-    return parse_arxiv_atom(_http_get(arxiv_query_url(cats, max_results=max_results)))
+def fetch_arxiv(cats=ARXIV_CATS, *, terms=None, max_results: int = 50) -> list[dict]:
+    return parse_arxiv_atom(_http_get(arxiv_query_url(cats, terms=terms, max_results=max_results)))
 
 
 # ------------------------------------------------------------------ RSS 2.0
@@ -141,7 +154,12 @@ def discover(conn, *, max_results: int = 50, include_rss: bool = True) -> dict:
     from src.pipeline import db
 
     counts: dict[str, int] = {}
-    sources: list[tuple[str, callable]] = [("arxiv", lambda: fetch_arxiv(max_results=max_results))]
+    sources: list[tuple[str, callable]] = [
+        ("arxiv", lambda: fetch_arxiv(max_results=max_results)),
+        # barrido de microestructura (rescata q-fin.TR, infrarrepresentado por categoría)
+        ("arxiv_microstructure",
+         lambda: fetch_arxiv(cats=("q-fin.TR",), terms=MICROSTRUCTURE_TERMS, max_results=max_results)),
+    ]
     if include_rss:
         for src in RSS_FEEDS:
             sources.append((src, (lambda s=src: fetch_rss(s))))

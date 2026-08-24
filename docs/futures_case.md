@@ -139,14 +139,26 @@ sitio antes de suscribir — varias páginas usan calculadora interactiva):
 
 | Vendor | Producto | Precio aprox. (USD/mes) | COP/mes (~3037/USD) | nota |
 |---|---|---|---|---|
-| **Norgate Data** | Futures (~100 mercados, continuos roll-adjusted, EOD) | ~45-60 | ~135k-180k | el ajuste EXACTO al caso; calculadora interactiva |
+| **Norgate Data** | Futures (~100 mercados, continuos roll-adjusted, **EOD**) | ~22.5 (270/año) | ~68k | el ajuste EXACTO al caso; precio verificado 2026-08-24; **sin tick/volumen intradía** |
 | Barchart | planes EOD histórico | ~30-100 | ~90k-300k | tiers |
 | Nasdaq Data Link | algunas tablas de futuros | variable | — | cobertura desigual |
 | CME DataMine | settlements del exchange | caro/enterprise | — | overkill |
 
-**El más ajustado y barato: Norgate (~$50/mes ≈ 152k COP).** Comparado con una cuota de
-challenge (~$500 ≈ **1.5M COP**), ya presupuestada como I+D con expectativa negativa, el
-dato cuesta **~1/10 de UN challenge**. La asequibilidad NO es el cuello de botella.
+**El más ajustado y barato: Norgate.** Precio VERIFICADO (norgatedata.com, consulta
+2026-08-24): **USD 270/año ≈ $22.50/mes equivalente** (sólo términos de 6 o 12 meses, no
+hay mensual) — aún más barato que la estimación previa de ~$50/mes. Comparado con una cuota
+de challenge (~$500 ≈ **1.5M COP**), el dato cuesta **~1/20 de UN challenge**. La
+asequibilidad NO es el cuello de botella.
+
+> **CORRECCIÓN IMPORTANTE (change research-pipeline-intraday): Norgate es EOD.** El mes
+> planeado da continuos ajustados por roll de fin de día — **NO habilita order flow ni
+> volume profile intradía** (no trae cinta tick ni volumen consolidado intradía). Si el
+> destino es microestructura (order flow, footprint, VPIN), requiere **otro proveedor y
+> otro presupuesto**: barras 1-min + volumen ≈ **IQFeed ~$133/mes** (core $108.15 + futuros
+> $24.87, dtn 2025-12), y order book L2/L3 ≈ **Databento Plus ~$1 750/mes** (databento.com,
+> 2026-08-24). Ambos MUY por encima del presupuesto de datos del pipeline ($60/mes). El mes
+> de Norgate responde la pregunta de EDGE de trend/amplitud en swing, NO la de
+> microestructura. Que no haya confusión: son dos preguntas y dos presupuestos distintos.
 
 ### VEREDICTO contra el criterio comprometido
 

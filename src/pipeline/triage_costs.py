@@ -43,59 +43,80 @@ def bruto_requerido(duty_cycle: float, vehiculo: str = "cfd") -> float:
     )
 
 
+_INTRADAY_FREQ = {"intraday_bar", "tick", "orderbook"}
+
+
 @dataclass(frozen=True)
 class CostVerdict:
     decision: str                 # keep | reject | requiere_lectura
     razon: str
     requerido_cfd: float
     requerido_futuros: float
+    requerido_intraday: float | None = None  # sólo en régimen intradía
 
 
 def triage_costs(candidate: dict) -> CostVerdict:
-    """Evaluar un candidato contra el suelo de costes de AMBOS vehículos.
+    """Evaluar un candidato contra el suelo de costes correcto para su FRECUENCIA.
 
-    Regla:
+    - EOD (swing): contra AMBOS vehículos (CFD 0.64 / futuros 0.424) por duty.
+    - intradía/tick/orderbook: contra el suelo por ROTACIÓN (`trades_por_dia_estimado`,
+      `contrato_ref`), donde el coste lo domina rotar, no mantener.
+
+    Regla común:
       - bruto_reportado ausente (None)  → `requiere_lectura` (no se descarta).
-      - bruto_reportado > requerido en AL MENOS un vehículo → `keep`.
-      - bruto_reportado <= requerido en ambos → `reject`.
-
-    `duty_cycle_estimado` es obligatorio; sin él no hay listón. `turnover_estimado` se
-    conserva en la ficha para el registro de aprendizaje pero no entra en el listón por
-    duty (ese ya está calibrado sobre las corridas reales).
+      - bruto_reportado > requerido      → `keep`.
+      - bruto_reportado <= requerido     → `reject`.
     """
+    freq = candidate.get("frecuencia") or "EOD"
+    if freq in _INTRADAY_FREQ:
+        return _triage_intraday(candidate)
+
     duty = candidate.get("duty_cycle_estimado")
     if duty is None:
-        raise ValueError("triage_costs requiere duty_cycle_estimado")
+        raise ValueError("triage_costs (EOD) requiere duty_cycle_estimado")
     req_cfd = bruto_requerido(duty, "cfd")
     req_fut = bruto_requerido(duty, "futures")
 
     reportado = candidate.get("bruto_reportado")
     if reportado is None:
-        return CostVerdict(
-            decision="requiere_lectura",
-            razon="el abstract no reporta bruto; baja prioridad, pendiente de lectura",
-            requerido_cfd=req_cfd,
-            requerido_futuros=req_fut,
-        )
+        return CostVerdict("requiere_lectura",
+                           "el abstract no reporta bruto; baja prioridad, pendiente de lectura",
+                           req_cfd, req_fut)
 
-    pasa_cfd = reportado > req_cfd
-    pasa_fut = reportado > req_fut
+    pasa_cfd, pasa_fut = reportado > req_cfd, reportado > req_fut
     if pasa_cfd or pasa_fut:
         vh = "CFD y futuros" if (pasa_cfd and pasa_fut) else ("CFD" if pasa_cfd else "futuros")
-        return CostVerdict(
-            decision="keep",
-            razon=f"bruto {reportado:.2f} supera el requerido en {vh} "
-                  f"(cfd {req_cfd:.2f}, fut {req_fut:.2f})",
-            requerido_cfd=req_cfd,
-            requerido_futuros=req_fut,
-        )
-    return CostVerdict(
-        decision="reject",
-        razon=f"bruto {reportado:.2f} < requerido en ambos vehículos "
-              f"(cfd {req_cfd:.2f}, fut {req_fut:.2f})",
-        requerido_cfd=req_cfd,
-        requerido_futuros=req_fut,
-    )
+        return CostVerdict("keep",
+                           f"bruto {reportado:.2f} supera el requerido en {vh} "
+                           f"(cfd {req_cfd:.2f}, fut {req_fut:.2f})", req_cfd, req_fut)
+    return CostVerdict("reject",
+                       f"bruto {reportado:.2f} < requerido en ambos vehículos "
+                       f"(cfd {req_cfd:.2f}, fut {req_fut:.2f})", req_cfd, req_fut)
+
+
+def _triage_intraday(candidate: dict) -> CostVerdict:
+    trades = candidate.get("trades_por_dia_estimado")
+    if trades is None:
+        raise ValueError("triage_costs (intradía) requiere trades_por_dia_estimado")
+    contrato = candidate.get("contrato_ref") or "ES"
+    req_id = costs_model.sharpe_bruto_requerido_intraday(trades, contrato)
+    # referencias swing (para el contraste en la razón)
+    req_cfd, req_fut = bruto_requerido(1.0, "cfd"), bruto_requerido(1.0, "futures")
+    reportado = candidate.get("bruto_reportado")
+    if reportado is None:
+        return CostVerdict("requiere_lectura",
+                           f"intradía {contrato} {trades}/día: sin bruto reportado; "
+                           f"requerido {req_id:.2f}, pendiente de lectura",
+                           req_cfd, req_fut, requerido_intraday=req_id)
+    if reportado > req_id:
+        return CostVerdict("keep",
+                           f"bruto {reportado:.2f} supera el requerido intradía "
+                           f"{req_id:.2f} ({contrato}, {trades}/día)",
+                           req_cfd, req_fut, requerido_intraday=req_id)
+    return CostVerdict("reject",
+                       f"bruto {reportado:.2f} < requerido intradía {req_id:.2f} "
+                       f"({contrato}, {trades}/día — lo domina rotar)",
+                       req_cfd, req_fut, requerido_intraday=req_id)
 
 
 def apply(conn, hyp_id: str, candidate: dict | None = None) -> CostVerdict:
@@ -115,6 +136,7 @@ def apply(conn, hyp_id: str, candidate: dict | None = None) -> CostVerdict:
         "id": hyp_id,
         "bruto_requerido_cfd": verdict.requerido_cfd,
         "bruto_requerido_futuros": verdict.requerido_futuros,
+        "bruto_requerido_intraday": verdict.requerido_intraday,
         "triage_costo": verdict.decision,
         "triage_costo_razon": verdict.razon,
         "estado": estado,
