@@ -1,0 +1,4 @@
+# MANIFEST.sha256 — data/raw_crypto (versionado en git; los .zip NO).
+# <sha256>  <key relativo a data/raw_crypto/>
+522c7cc5e73632ce8f375546323450a966cf8eb58509e68ba66cb77503fb6617  futures/um/daily/aggTrades/BTCUSDT/BTCUSDT-aggTrades-2024-01-02.zip
+a90b5a86f55456db60171b51dba1585dd107c6b7030bef6f9bfe0f85e79f2f8b  futures/um/daily/bookTicker/BTCUSDT/BTCUSDT-bookTicker-2024-01-02.zip
