@@ -240,10 +240,10 @@ def test_manual_candidate_ssrn():
 
 
 # ------------------------------------------------- backfill = conjunto de validación
-def test_backfill_loads_nine(conn):
+def test_backfill_loads_eleven(conn):
     n = backfill.load_backfill(conn)
-    assert n == 9        # 7 EOD + AMT/volume-profile + ICT/SMC
-    assert conn.execute("SELECT COUNT(*) FROM hipotesis").fetchone()[0] == 9
+    assert n == 11       # 8 con veredicto + H004 (datos) + AMT + ICT
+    assert conn.execute("SELECT COUNT(*) FROM hipotesis").fetchone()[0] == 11
 
 
 def test_backfill_reproduces_zero_survivors(conn):
@@ -258,17 +258,45 @@ def test_backfill_class_distribution(conn):
     backfill.load_backfill(conn)
     rows = dict(conn.execute(
         "SELECT clase_de_dato, COUNT(*) FROM hipotesis GROUP BY clase_de_dato").fetchall())
-    assert rows["precio"] == 5           # las 5 price-based originales
-    assert rows["calendario"] == 1       # H003
-    assert rows["flujo"] == 3            # COT + volume-profile + ICT
+    assert rows["precio"] == 5            # las 5 price-based
+    assert rows["calendario"] == 1        # H003
+    assert rows["flujo"] == 4             # COT + volume-profile + ICT + OFI
+    assert rows["volatilidad_implicita"] == 1   # H004 (reabierta por Deribit)
+    # 5/8 de las familias con veredicto son precio
+    fam8 = dict(conn.execute(
+        "SELECT clase_de_dato, COUNT(*) FROM hipotesis WHERE id NOT IN ('MP001','ICT001','H004') "
+        "GROUP BY clase_de_dato").fetchall())
+    assert fam8["precio"] == 5
 
 
 def test_backfill_frequency_distribution(conn):
     backfill.load_backfill(conn)
     rows = dict(conn.execute(
         "SELECT frecuencia, COUNT(*) FROM hipotesis GROUP BY frecuencia").fetchall())
-    assert rows["EOD"] == 7
+    assert rows["EOD"] == 8
     assert rows["intraday_bar"] == 2
+    assert rows["orderbook"] == 1
+
+
+def test_backfill_causa_de_muerte_and_source_type(conn):
+    backfill.load_backfill(conn)
+    causas = dict(conn.execute(
+        "SELECT causa_de_muerte, COUNT(*) FROM hipotesis GROUP BY causa_de_muerte").fetchall())
+    assert causas["coste"] == 5 and causas["concentracion"] == 1 and causas["falsabilidad"] == 1
+    # las 8 con veredicto son fuente reviewer / paper_arbitrado
+    tipos = dict(conn.execute("SELECT tipo_de_fuente, COUNT(*) FROM hipotesis "
+                              "GROUP BY tipo_de_fuente").fetchall())
+    assert tipos["paper_arbitrado"] == 9   # 8 familias + H004
+    assert tipos["youtube"] == 1           # ICT
+    # H004 reabierta por Deribit (coste de datos 0)
+    assert db.get(conn, "H004")["costo_datos_usd_mes"] == 0.0
+    assert db.get(conn, "H004")["clase_de_dato"] == "volatilidad_implicita"
+
+
+def test_stop_condition_counter(conn):
+    backfill.load_backfill(conn)
+    assert db.count_processed(conn) == 11        # todas con veredicto → procesadas
+    assert db.N_CONDICION_PARADA == 200
 
 
 def test_backfill_microstructure_reject_reasons(conn):
@@ -287,7 +315,7 @@ def test_backfill_original_seven_from_reviewer(conn):
 def test_backfill_is_idempotent(conn):
     backfill.load_backfill(conn)
     backfill.load_backfill(conn)
-    assert conn.execute("SELECT COUNT(*) FROM hipotesis").fetchone()[0] == 9
+    assert conn.execute("SELECT COUNT(*) FROM hipotesis").fetchone()[0] == 11
 
 
 # ------------------------------------------------- reporte de aprendizaje

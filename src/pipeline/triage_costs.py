@@ -33,6 +33,24 @@ VEHICULOS = {
 }
 UMBRAL_NETO = 0.40  # el net Sharpe objetivo (metrica_exito del proyecto)
 
+# Listones MEDIDOS de referencia (bruto requerido), recalibrados con ambos ciclos.
+# Se usan para reportar contra qué se compara cada candidato (docs/program_verdict.md,
+# docs/cost_floor.md, docs/own_capital_phase.md).
+LISTONES_REFERENCIA = {
+    "cfd_swing_8pct":        0.64,   # CFD spot, 8% vol
+    "futuros_swing_8pct":    0.42,
+    "cripto_perp_mejor":     0.65,   # maker + 1 rt/día + funding evitado (vol real ~60%)
+    "capital_propio_20pct":  0.50,   # SÓLO si la vol extra viene de instrumentos más volátiles
+                                     # al mismo notional, NO de apalancamiento (coste/vol
+                                     # invariante — verificado). Ver own_capital_phase.md.
+}
+
+
+def sharpe_activo_requerido(duty_cycle: float) -> float:
+    """Duty bajo: el Sharpe ACTIVO requerido SUBE, no baja: 0.40/√duty + 0.245.
+    Reexportado de costs_model para el triaje (lección del ciclo CFD)."""
+    return costs_model.sharpe_activo_requerido(duty_cycle)
+
 
 def bruto_requerido(duty_cycle: float, vehiculo: str = "cfd") -> float:
     """Bruto Sharpe requerido para netear `UMBRAL_NETO`, dado el duty y el vehículo."""
