@@ -189,3 +189,53 @@ Referencia de contraste: el **CFD swing** tenía coste **1.96%/año** y requerid
 suelo que ya mató seis hipótesis** — y el bruto requerido crece linealmente con la
 frecuencia. Cualquier hipótesis intradía tiene que reportar un bruto muy por encima de
 0.64 para justificar rotar; ése es el listón que la estación 3 le aplica automáticamente.
+
+---
+
+## Suelo de costes CRIPTO — Binance USDⓈ-M perpetuos (change crypto-cost-model)
+
+Régimen distinto otra vez: cripto opera **24/7 (365 días/año)**, la comisión distingue
+**maker/taker**, y el **funding es EVITABLE**. `src/crypto/cost_model.py`. Precios VIP0
+verificados (binance.com/en/fee/futureFee, 2026-08-24): **maker 0.02%, taker 0.05%**.
+Funding cada 8 h en cortes fijos **00:00/08:00/16:00 UTC**, ~0.01%/período (~11%/año si se
+mantiene) — **cero si se cierra antes del corte**. Vol y spread MEDIDOS de datos reales
+(BTCUSDT 2024-01-02): vol diaria **3.1%** (anual ~60%), spread **0.03 bp** (top of book;
+slippage despreciable para tamaños que caben en el mejor nivel).
+
+### Coste por unidad de riesgo (el número del pivote)
+
+Comisión round-trip / vol diaria: **taker 0.032 · maker 0.013** — ambos por debajo del
+**MES ~0.063** citado en la racional del pivote (reproduce 0.033 con datos reales). BTC
+tiene ~3× la vol con comisiones sólo ~1.6× → coste/riesgo ≈ 0.5×. Éste es el número
+COMPARABLE entre vehículos (normalizado por vol).
+
+### Sharpe bruto requerido (vol real ~60%, slippage = spread ≈ 0)
+
+| trades/día | maker | funding en corte | bruto requerido |
+|---|---|---|---|
+| 1 | 0% (taker) | no | 1.01 |
+| 1 | 100% (maker) | no | **0.65** |
+| 1 | 100% (maker) | sí | 0.83 |
+| 2 | 0% (taker) | no | 1.62 |
+| 2 | 100% (maker) | no | **0.89** |
+| 5 | 100% (maker) | no | 1.63 |
+| 10 | 100% (maker) | no | 2.85 |
+
+(Tabla completa 4×3×2 vía `python -m scripts.crypto_costs`.)
+
+### Comparación honesta contra las referencias del proyecto
+
+- **Coste por unidad de riesgo (la base COMPARABLE):** cripto maker **0.013** / taker
+  **0.032** quedan **por DEBAJO** del MES 0.063 → cripto es favorable, tal como dice el
+  pivote. Reproducido con datos reales.
+- **Nivel absoluto de bruto requerido:** cripto sólo queda a la altura de CFD swing (0.64)
+  y MES intradía (0.85) en la esquina **maker + baja frecuencia + funding evitado**: maker
+  1 rt/día = **0.65** (≈ CFD 0.64), maker 2 rt/día = **0.89** (≈ MES 0.85). Con **taker** o
+  **alta frecuencia** el listón se dispara (taker 2/día 1.62; 10/día 2.85). CAVEAT: las
+  referencias 0.64/0.85 se calcularon con la convención simplificada de 8% de vol y NO son
+  directamente comparables en nivel; el número comparable es el coste por unidad de riesgo.
+- **Las palancas decisivas** (registrar): (1) **maker vs taker** ~halva el premium
+  requerido; (2) **evitar funding** ahorra ~0.18 de bruto requerido — la PRIMERA estructura
+  de costes del proyecto que **premia estar FUERA del mercado**; (3) la **frecuencia** es
+  punitiva (365 días/año). Una estrategia cripto viable casi seguro es **maker, selectiva y
+  flat en los cortes de funding** — no un taker de alta frecuencia.
