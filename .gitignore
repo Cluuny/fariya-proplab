@@ -31,3 +31,9 @@ dist/
 /data/raw_crypto/**/*.zip
 /data/raw_crypto/**/*.CHECKSUM
 !/data/raw_crypto/MANIFEST.sha256
+
+# Papers: copyright, no redistribuir. Ver data/papers/README.md
+data/papers/*.pdf
+data/papers/*.PDF
+!data/papers/README.md
+!data/papers/MANIFEST.md
