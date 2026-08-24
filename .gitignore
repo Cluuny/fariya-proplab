@@ -26,3 +26,8 @@ dist/
 
 # Pipeline de investigación (base regenerable con `pipeline backfill`)
 /data/pipeline/*.db
+
+# Cripto: volcados de libro (grandes, re-descargables); se versiona sólo el MANIFEST
+/data/raw_crypto/**/*.zip
+/data/raw_crypto/**/*.CHECKSUM
+!/data/raw_crypto/MANIFEST.sha256
