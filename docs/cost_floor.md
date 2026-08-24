@@ -139,3 +139,53 @@ priorizar hipótesis con (a) bruto reportado alto en la literatura (>0.64 tras e
 (carry) tiene bruto/carry favorable (pasó el cribado) pero es always-in (duty cycle alto)
 y concentrado — su margen será alto; su pre-registro debe estimar gross y duty cycle y
 pasar el filtro #6 con esos números.
+
+---
+
+## Suelo de costes INTRADÍA — cambia de régimen (change research-pipeline-intraday)
+
+El modelo de arriba es **swing**: el coste lo domina el **mantener** (margen diario). En
+**intradía lo domina el ROTAR** — el margen es despreciable y el coste es comisión +
+spread por operación × frecuencia. `costs_model.sharpe_bruto_requerido_intraday`:
+
+    costo_anual = trades_por_dia × 252 × (comision_rt + spread_$) / notional
+    bruto_requerido = umbral(0.40) + costo_anual / vol_objetivo(8%)
+
+**Calibración** (specs CONTRACTUALES de CME —tick/point value son definiciones estables—
++ comisión IBKR ~$4.20 round-trip; `notional` al nivel de precio ~2026-08, RECALCULAR a
+precio corriente antes de decidir). `spread_$` = 1 tick del front líquido.
+
+| contrato | tick $ | notional $ | coste/round-trip | coste por 1 trade/día |
+|---|---|---|---|---|
+| ES | 12.50 | 300 000 | $16.70 | **1.40%/año** |
+| NQ |  5.00 | 400 000 | $9.20  | 0.58%/año |
+| CL | 10.00 |  75 000 | $14.20 | **4.77%/año** |
+| GC | 10.00 | 240 000 | $14.20 | 1.49%/año |
+
+### Tabla de referencia (ES, vol 8%)
+
+| trades/día | coste anual aprox | bruto requerido (vol 8%) |
+|---|---|---|
+| 0.05 (swing, ~12/año) | 0.07% | 0.41 |
+| 1 | 1.40% | 0.58 |
+| 2 | 2.81% | 0.75 |
+| 5 | 7.01% | 1.28 |
+| 20 | 28.06% | 3.91 |
+
+### La advertencia principal
+
+Referencia de contraste: el **CFD swing** tenía coste **1.96%/año** y requerido **0.64**, y
+**mató seis hipótesis**. ¿A partir de cuántos trades/día el coste intradía SUPERA ese
+1.96%?
+
+| contrato | round-trips/día que igualan el 1.96% del margen CFD |
+|---|---|
+| **CL** | **0.41** (¡menos de 1 trade/día ya es más caro que el CFD!) |
+| GC | 1.31 |
+| **ES** | **1.40** |
+| NQ | 3.38 |
+
+**Por encima de ~1.4 round-trips/día en ES (0.4 en CL), el intradía es MÁS caro que el
+suelo que ya mató seis hipótesis** — y el bruto requerido crece linealmente con la
+frecuencia. Cualquier hipótesis intradía tiene que reportar un bruto muy por encima de
+0.64 para justificar rotar; ése es el listón que la estación 3 le aplica automáticamente.

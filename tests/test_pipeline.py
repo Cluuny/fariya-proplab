@@ -61,11 +61,15 @@ def test_operability_rejects_by_declared_universe():
     assert v.decision == "reject" and "500" in v.razon
 
 
-def test_operability_rejects_options_and_intraday():
+def test_operability_rejects_options_but_intraday_now_competes():
+    # opciones: sigue siendo un rechazo de operabilidad (dato fuera de alcance)
     assert triage_operability.triage_operability(
         {"titulo": "Variance risk premium", "abstract": "implied volatility and options"}).decision == "reject"
+    # CORRECCIÓN de este change: la microestructura intradía ya NO se rechaza por omisión;
+    # con datos dentro de presupuesto, COMPITE (cae en el suelo de costos intradía).
     assert triage_operability.triage_operability(
-        {"titulo": "Order book imbalance", "abstract": "intraday high-frequency signal"}).decision == "reject"
+        {"titulo": "Order book imbalance", "abstract": "an order flow trading rule",
+         "costo_datos_usd_mes": 0.0}).decision == "keep"
 
 
 def test_operability_rejects_no_rule():
@@ -113,6 +117,78 @@ def test_cost_triage_needs_duty():
 def test_low_duty_lowers_the_required_gross():
     # el requerido de serie completa baja con el duty (0.24·duty + 0.40)
     assert triage_costs.bruto_requerido(0.2, "cfd") < triage_costs.bruto_requerido(1.0, "cfd")
+
+
+# ------------------------------------------------- estación 3: INTRADÍA
+def test_intraday_required_rises_with_trades_per_day():
+    r1 = costs_model.sharpe_bruto_requerido_intraday(1, "ES")
+    r5 = costs_model.sharpe_bruto_requerido_intraday(5, "ES")
+    assert r5 > r1 > 0.40                     # rotar sube el listón por encima del umbral
+    # a ~0 trades/día tiende al umbral (coste de rotación → 0)
+    assert costs_model.sharpe_bruto_requerido_intraday(0.0, "ES") == pytest.approx(0.40, abs=1e-9)
+
+
+def test_intraday_crossover_vs_cfd_floor():
+    # a partir de ~1.4 round-trips/día el coste ES supera el 1.96%/año del margen CFD
+    x = costs_model.trades_por_dia_break_1p96("ES")
+    assert 1.2 < x < 1.6
+    # y el coste anual a esa frecuencia iguala 1.96%
+    assert costs_model.costo_anual_intraday(x, "ES") == pytest.approx(0.0196, rel=1e-6)
+
+
+def test_intraday_contracts_differ():
+    # CL (notional pequeño) es mucho más caro por round-trip que NQ (notional grande)
+    assert costs_model.trades_por_dia_break_1p96("CL") < costs_model.trades_por_dia_break_1p96("NQ")
+
+
+def test_cost_triage_routes_intraday_by_frequency():
+    # frecuencia intradía → usa el suelo por rotación, no el swing por duty
+    v = triage_costs.triage_costs(
+        {"frecuencia": "tick", "trades_por_dia_estimado": 5, "contrato_ref": "ES",
+         "bruto_reportado": 0.60})
+    assert v.decision == "reject"             # 0.60 < requerido intradía a 5/día (~1.28)
+    assert v.requerido_intraday is not None and v.requerido_intraday > 1.0
+
+
+def test_cost_triage_intraday_needs_trades():
+    with pytest.raises(ValueError):
+        triage_costs.triage_costs({"frecuencia": "orderbook", "bruto_reportado": 2.0})
+
+
+# ------------------------------------------------- estación 2: falsabilidad + datos
+def test_operability_rejects_non_falsifiable_ict():
+    v = triage_operability.triage_operability(
+        {"titulo": "Trading order blocks and fair value gaps", "abstract": "smart money concepts"})
+    assert v.decision == "reject" and v.categoria == "falsabilidad"
+
+
+def test_operability_rejects_over_data_budget():
+    v = triage_operability.triage_operability(
+        {"titulo": "Volume profile strategy", "abstract": "value area trading rule",
+         "costo_datos_usd_mes": 133.0})
+    assert v.decision == "reject" and v.categoria == "datos"
+
+
+def test_operability_lets_microstructure_compete():
+    # order flow con datos dentro de presupuesto NO se rechaza por omisión: compite
+    v = triage_operability.triage_operability(
+        {"titulo": "Order flow imbalance in futures", "abstract": "a trading rule using order flow",
+         "costo_datos_usd_mes": 0.0})
+    assert v.decision == "keep"
+
+
+def test_operability_flags_volume_profile_incremental_test():
+    v = triage_operability.triage_operability(
+        {"titulo": "Volume profile levels", "abstract": "trading rule on VAH VAL POC value area",
+         "costo_datos_usd_mes": 0.0})
+    assert v.decision == "keep" and v.requiere_test_incremental is True
+
+
+def test_falsifiability_checked_before_data_budget():
+    # ICT con datos gratis: igual se rechaza por falsabilidad (categoría, no coste)
+    v = triage_operability.triage_operability(
+        {"titulo": "order block strategy", "abstract": "fair value gap", "costo_datos_usd_mes": 0.0})
+    assert v.categoria == "falsabilidad"
 
 
 # ------------------------------------------------- estación 1: parsing (sin red)
@@ -164,10 +240,10 @@ def test_manual_candidate_ssrn():
 
 
 # ------------------------------------------------- backfill = conjunto de validación
-def test_backfill_loads_seven(conn):
+def test_backfill_loads_nine(conn):
     n = backfill.load_backfill(conn)
-    assert n == 7
-    assert conn.execute("SELECT COUNT(*) FROM hipotesis").fetchone()[0] == 7
+    assert n == 9        # 7 EOD + AMT/volume-profile + ICT/SMC
+    assert conn.execute("SELECT COUNT(*) FROM hipotesis").fetchone()[0] == 9
 
 
 def test_backfill_reproduces_zero_survivors(conn):
@@ -178,25 +254,40 @@ def test_backfill_reproduces_zero_survivors(conn):
     assert vivas == 0     # el veredicto conocido: cero supervivientes
 
 
-def test_backfill_class_distribution_is_5_precio(conn):
+def test_backfill_class_distribution(conn):
     backfill.load_backfill(conn)
     rows = dict(conn.execute(
         "SELECT clase_de_dato, COUNT(*) FROM hipotesis GROUP BY clase_de_dato").fetchall())
-    assert rows["precio"] == 5
-    assert rows["calendario"] == 1
-    assert rows["flujo"] == 1
+    assert rows["precio"] == 5           # las 5 price-based originales
+    assert rows["calendario"] == 1       # H003
+    assert rows["flujo"] == 3            # COT + volume-profile + ICT
 
 
-def test_backfill_all_from_reviewer(conn):
+def test_backfill_frequency_distribution(conn):
     backfill.load_backfill(conn)
-    fuentes = {r[0] for r in conn.execute("SELECT DISTINCT fuente_de_la_idea FROM hipotesis")}
+    rows = dict(conn.execute(
+        "SELECT frecuencia, COUNT(*) FROM hipotesis GROUP BY frecuencia").fetchall())
+    assert rows["EOD"] == 7
+    assert rows["intraday_bar"] == 2
+
+
+def test_backfill_microstructure_reject_reasons(conn):
+    backfill.load_backfill(conn)
+    assert db.get(conn, "MP001")["estado"] == "rechazada_por_datos"
+    assert db.get(conn, "ICT001")["estado"] == "rechazada_por_falsabilidad"
+
+
+def test_backfill_original_seven_from_reviewer(conn):
+    backfill.load_backfill(conn)
+    fuentes = {r[0] for r in conn.execute(
+        "SELECT DISTINCT fuente_de_la_idea FROM hipotesis WHERE id NOT IN ('MP001','ICT001')")}
     assert fuentes == {"reviewer"}
 
 
 def test_backfill_is_idempotent(conn):
     backfill.load_backfill(conn)
     backfill.load_backfill(conn)
-    assert conn.execute("SELECT COUNT(*) FROM hipotesis").fetchone()[0] == 7
+    assert conn.execute("SELECT COUNT(*) FROM hipotesis").fetchone()[0] == 9
 
 
 # ------------------------------------------------- reporte de aprendizaje

@@ -27,10 +27,13 @@ DEFAULT_DB_PATH = Path("data/pipeline/research.db")
 CLASES_DE_DATO = (
     "precio", "macro", "flujo", "fundamental", "estructura_temporal", "calendario",
 )
+FRECUENCIAS = ("EOD", "intraday_bar", "tick", "orderbook")
 FUENTES_DE_LA_IDEA = ("pipeline", "humano", "reviewer")
 ESTADOS = (
     "candidato",          # recién descubierto, sin triar
     "rechazada_operabilidad",
+    "rechazada_por_datos",       # coste de datos > presupuesto, o dato no disponible
+    "rechazada_por_falsabilidad",  # no mide un dato externo (ICT/SMC)
     "rechazada_costo",
     "requiere_lectura",   # el abstract no reporta bruto → baja prioridad, no se descarta
     "en_cola",            # pasó los triajes, esperando test
@@ -58,19 +61,29 @@ CREATE TABLE IF NOT EXISTS hipotesis (
     estructura               TEXT,
     direccionalidad          TEXT,
     clase_de_dato            TEXT,          -- precio|macro|flujo|fundamental|estructura_temporal|calendario
+    -- frecuencia / requisitos de datos (intradía y microestructura)
+    frecuencia               TEXT,          -- EOD | intraday_bar | tick | orderbook
+    requiere_volumen_consolidado INTEGER,   -- 0/1 (FX spot NO lo tiene; futuros SÍ)
+    requiere_cinta_tick      INTEGER,       -- 0/1
+    requiere_order_book_l2   INTEGER,       -- 0/1
+    costo_datos_usd_mes      REAL,          -- coste de datos de PRIMERA CLASE
     -- operabilidad (estación 2)
     n_instrumentos           INTEGER,
-    frecuencia_datos         TEXT,
+    frecuencia_datos         TEXT,          -- (legado; descripción libre)
     datos_requeridos         TEXT,          -- JSON list
     operable_en_prop         INTEGER,       -- 0/1
+    requiere_test_incremental INTEGER,      -- 0/1 (volume profile: vs niveles simples)
     triage_operabilidad      TEXT,          -- keep | reject
     triage_operabilidad_razon TEXT,
     -- triaje de costos (estación 3)
     duty_cycle_estimado      REAL,
     turnover_estimado        REAL,
+    trades_por_dia_estimado  REAL,          -- para el suelo INTRADÍA (round-trips/día)
+    contrato_ref             TEXT,          -- ES|NQ|CL|GC para el suelo intradía
     bruto_reportado          REAL,          -- NULL si el abstract no lo dice
     bruto_requerido_cfd      REAL,
     bruto_requerido_futuros  REAL,
+    bruto_requerido_intraday REAL,
     triage_costo             TEXT,          -- keep | reject | requiere_lectura
     triage_costo_razon       TEXT,
     -- hipótesis testeable / veredicto (backfill de las ya testeadas)

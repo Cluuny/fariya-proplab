@@ -119,14 +119,58 @@ BACKFILL: list[dict] = [
         "estado": "cribada_fuera", "veredicto": "cribada-fuera (activo ≈ 0; signo roto en 5/8)",
         "fecha_test": None,
     },
+    # --- microestructura: entran al registro para COMPETIR, con su rechazo motivado ---
+    {
+        "id": "MP001",
+        "titulo": "Auction Market Theory / Volume Profile (VAH/VAL/POC)",
+        "familia": "microstructure", "mecanismo": "subasta / value area",
+        "estructura": "time_series", "direccionalidad": "long_short",
+        "clase_de_dato": "flujo", "fuente_de_la_idea": "humano",
+        "fuente": "manual", "n_instrumentos": 4,
+        "frecuencia": "intraday_bar",
+        "requiere_volumen_consolidado": 1, "requiere_cinta_tick": 0, "requiere_order_book_l2": 0,
+        "costo_datos_usd_mes": 133.0,   # IQFeed core $108.15 + futuros $24.87 (dtn, 2025-12)
+        "datos_requeridos": ["barras_1min", "volumen_consolidado"], "operable_en_prop": 0,
+        "requiere_test_incremental": 1,
+        "estado": "rechazada_por_datos",
+        "veredicto": (
+            "rechazada por DATOS: volume profile intradía necesita barras 1-min + volumen "
+            "consolidado (IQFeed ~$133/mo) > presupuesto $60/mo; Norgate (EOD, ~$22.50/mo) NO "
+            "lo habilita. Además requeriría test INCREMENTAL vs niveles simples (máx/mín N días)."),
+        "bruto_esperado": None, "bruto_medido": None, "duty_cycle_real": None, "fecha_test": None,
+    },
+    {
+        "id": "ICT001",
+        "titulo": "ICT / Smart Money Concepts (order blocks, fair value gaps)",
+        "familia": "microstructure", "mecanismo": "'liquidez institucional' (no verificable)",
+        "estructura": "time_series", "direccionalidad": "long_short",
+        "clase_de_dato": "flujo", "fuente_de_la_idea": "humano",
+        "fuente": "manual", "n_instrumentos": 1,
+        "frecuencia": "intraday_bar",
+        "requiere_volumen_consolidado": 0, "requiere_cinta_tick": 0, "requiere_order_book_l2": 0,
+        "costo_datos_usd_mes": 0.0,     # se define sobre el gráfico → NO necesita dato externo (ése es el fallo)
+        "datos_requeridos": ["precio_ohlc"], "operable_en_prop": 0,
+        "estado": "rechazada_por_falsabilidad",
+        "veredicto": (
+            "rechazada por FALSABILIDAD (filtro #1): order blocks / fair value gaps se "
+            "identifican dibujándolos sobre el gráfico después, no consultando dónde había "
+            "órdenes. No hay dato externo que los confirme o refute. Distinción de CATEGORÍA, "
+            "no de estilo ni prejuicio."),
+        "bruto_esperado": None, "bruto_medido": None, "duty_cycle_real": None, "fecha_test": None,
+    },
 ]
 
 
 def load_backfill(conn) -> int:
-    """Upsert the 7 known hypotheses. Returns the count loaded. Idempotent."""
+    """Upsert the known hypotheses (7 EOD + 2 microestructura). Returns count. Idempotent.
+
+    Las 7 originales son EOD y coste de datos 0 (default aplicado aquí); las 2 de
+    microestructura declaran su frecuencia y coste explícitamente.
+    """
     from src.pipeline import db
 
     db.init_db(conn)
     for rec in BACKFILL:
+        rec = {"frecuencia": "EOD", "costo_datos_usd_mes": 0.0, **rec}  # default EOD/gratis
         db.upsert(conn, rec)
     return len(BACKFILL)

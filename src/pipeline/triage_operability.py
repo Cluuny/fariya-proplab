@@ -1,19 +1,21 @@
-"""triage_operability.py — Estación 2: triaje de operabilidad.
+"""triage_operability.py — Estación 2: triaje de operabilidad + datos + falsabilidad.
 
-Con título + abstract, rechazar lo que NO podemos operar en una cuenta de fondeo con
-nuestro panel EOD spot/CFD (o futuros). Rechaza si:
-  - cross-sectional de acciones (universo > 100 instrumentos)
-  - requiere datos que no tenemos (opciones, intradía con volumen real, fundamentales
-    point-in-time de empresas)
-  - intradía
-  - sin regla operativa identificable
+Con título + abstract (+ campos declarados), rechaza lo que NO podemos o NO debemos
+operar. IMPORTANTE (corrección de este change): la microestructura/intradía ya NO se
+rechaza por omisión — COMPITE EN IGUALDAD, con su listón de costos correcto (estación 3).
+Los rechazos de esta estación son:
 
-DECISIÓN DE ALCANCE: este esqueleto implementa el triaje como HEURÍSTICA determinista
-sobre palabras clave del título+abstract, con una interfaz limpia (`triage_operability`)
-donde un modelo pequeño puede sustituir la heurística más adelante. La extracción con LLM
-está explícitamente fuera de alcance de este change (sólo si el mes de futuros da luz
-verde). La heurística es conservadora: ante la duda, `keep` (que caiga en el triaje de
-costos, más barato y discriminante).
+  1. FALSABILIDAD (filtro #1, distinción de CATEGORÍA): rechaza lo que no mide un dato
+     externo y verificable. ICT/SMC (order blocks, fair value gaps, "liquidez
+     institucional") se definen sobre el gráfico mismo → no hay dato que los confirme o
+     refute. Se ADMITE order flow / volume profile / VPIN / microestructura clásica
+     (Kyle, Glosten-Milgrom): miden algo que existe en un archivo de datos.
+  2. DATOS: coste de datos > presupuesto configurable (por defecto 60 USD/mes).
+  3. OPERABILIDAD clásica: cross-sectional de acciones (>100 instrumentos), opciones/vol
+     implícita, fundamentales point-in-time, o sin regla operativa identificable.
+
+DECISIÓN DE ALCANCE: heurística determinista sobre palabras clave, con interfaz limpia
+donde un modelo pequeño puede sustituirla. Extracción con LLM fuera de alcance.
 """
 
 from __future__ import annotations
@@ -21,14 +23,23 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-# Señales de cross-sectional de acciones (universo enorme, no operable en prop).
+# Presupuesto de datos por defecto (USD/mes). Configurable en `apply`.
+DATA_BUDGET_USD = 60.0
+
+# --- FALSABILIDAD: rechazadas por no medir un dato externo (ICT/SMC) ---
+_NON_FALSIFIABLE = (
+    "order block", "orderblock", "fair value gap", "fvg", "smart money concept",
+    "smart money", "liquidity grab", "liquidity sweep", "liquidity pool",
+    "inner circle trader", "ict ", "smc ", "judas swing", "optimal trade entry",
+    "breaker block", "mitigation block", "institutional liquidity",
+)
+# --- señales de cross-sectional de acciones (universo enorme, no operable en prop) ---
 _CROSS_SECTIONAL = (
     "cross-section", "cross section", "cross-sectional", "the cross section",
     "stock returns", "individual stocks", "equity anomal", "firm characteristic",
     "crsp", "compustat", "s&p 500 constituent", "russell 3000", "universe of stocks",
     "portfolio sort", "decile portfolio", "long-short equity", "fama-macbeth",
 )
-# Señales de datos que NO tenemos.
 _NEEDS_OPTIONS = (
     "option", "implied volatility", "vix", "variance risk premium", "straddle",
     "put-call", "iv surface", "volatility surface", "skew",
@@ -38,24 +49,30 @@ _NEEDS_FUNDAMENTALS = (
     "fundamental", "analyst forecast", "sec filing", "10-k", "10-q",
     "dividend yield anomal",
 )
-_INTRADAY = (
-    "intraday", "high-frequency", "high frequency", "microstructure",
-    "order book", "limit order", "tick data", "millisecond", "minute-bar",
-    "minute bar", "order flow imbalance",
-)
-# Señales POSITIVAS de una regla operativa identificable.
+# --- señales POSITIVAS de una regla operativa identificable (incluye microestructura) ---
 _HAS_RULE = (
     "time-series momentum", "time series momentum", "trend following", "trend-following",
     "carry", "moving average", "breakout", "mean reversion", "mean-reversion",
     "seasonal", "risk premium", "momentum", "signal", "trading rule", "long-short",
     "go long", "go short", "rebalanc",
+    # microestructura ADMITIDA
+    "order flow", "order-flow", "volume profile", "vpin", "order imbalance",
+    "order-flow imbalance", "price impact", "trade classification", "market microstructure",
+    "limit order book", "footprint", "value area",
+)
+# --- volume profile: requiere test INCREMENTAL vs niveles simples ---
+_VOLUME_PROFILE = (
+    "volume profile", "value area", "vah", "val", "poc", "point of control",
+    "volume-at-price", "volume at price", "market profile",
 )
 
 
 @dataclass(frozen=True)
 class OperabilityVerdict:
-    decision: str   # keep | reject
+    decision: str                 # keep | reject
     razon: str
+    categoria: str | None = None  # falsabilidad | datos | operabilidad (en reject)
+    requiere_test_incremental: bool = False
 
 
 def _hits(text: str, needles) -> str | None:
@@ -65,55 +82,78 @@ def _hits(text: str, needles) -> str | None:
     return None
 
 
-def triage_operability(candidate: dict) -> OperabilityVerdict:
-    """keep/reject + razón en una línea, a partir de título + abstract.
-
-    Un `n_instrumentos` declarado > 100 es un rechazo directo (cross-sectional) aunque el
-    texto no lo delate.
-    """
+def triage_operability(candidate: dict, *, budget_usd: float = DATA_BUDGET_USD) -> OperabilityVerdict:
+    """keep/reject + razón + categoría, a partir de título + abstract + campos declarados."""
     text = f"{candidate.get('titulo', '')} {candidate.get('abstract', '')}".lower()
     text = re.sub(r"\s+", " ", text)
 
+    # 1. FALSABILIDAD primero (distinción de categoría, no de estilo).
+    hit = _hits(text, _NON_FALSIFIABLE)
+    if hit:
+        return OperabilityVerdict("reject",
+            f"no falsable: '{hit}' se define sobre el gráfico, sin dato externo que lo "
+            f"confirme o refute (filtro #1)", categoria="falsabilidad")
+
+    # 2. DATOS: presupuesto.
+    costo = candidate.get("costo_datos_usd_mes")
+    if isinstance(costo, (int, float)) and costo > budget_usd:
+        return OperabilityVerdict("reject",
+            f"coste de datos {costo:.0f} USD/mes > presupuesto {budget_usd:.0f} USD/mes",
+            categoria="datos")
+
+    # 3. OPERABILIDAD clásica.
     n = candidate.get("n_instrumentos")
     if isinstance(n, (int, float)) and n > 100:
-        return OperabilityVerdict("reject", f"universo declarado {int(n)} > 100 (cross-sectional)")
-
+        return OperabilityVerdict("reject", f"universo declarado {int(n)} > 100 (cross-sectional)",
+                                  categoria="operabilidad")
     hit = _hits(text, _CROSS_SECTIONAL)
     if hit:
-        return OperabilityVerdict("reject", f"cross-sectional de acciones (señal: '{hit}')")
-    hit = _hits(text, _INTRADAY)
-    if hit:
-        return OperabilityVerdict("reject", f"intradía / alta frecuencia (señal: '{hit}')")
+        return OperabilityVerdict("reject", f"cross-sectional de acciones (señal: '{hit}')",
+                                  categoria="operabilidad")
     hit = _hits(text, _NEEDS_OPTIONS)
     if hit:
-        return OperabilityVerdict("reject", f"requiere datos de opciones/vol implícita (señal: '{hit}')")
+        return OperabilityVerdict("reject", f"requiere datos de opciones/vol implícita (señal: '{hit}')",
+                                  categoria="operabilidad")
     hit = _hits(text, _NEEDS_FUNDAMENTALS)
     if hit:
-        return OperabilityVerdict("reject", f"requiere fundamentales point-in-time (señal: '{hit}')")
-
+        return OperabilityVerdict("reject", f"requiere fundamentales point-in-time (señal: '{hit}')",
+                                  categoria="operabilidad")
     if not text.strip():
-        return OperabilityVerdict("reject", "sin título ni abstract: no hay regla identificable")
+        return OperabilityVerdict("reject", "sin título ni abstract: no hay regla identificable",
+                                  categoria="operabilidad")
     if _hits(text, _HAS_RULE) is None:
-        return OperabilityVerdict("reject", "sin regla operativa identificable en el abstract")
+        return OperabilityVerdict("reject", "sin regla operativa identificable en el abstract",
+                                  categoria="operabilidad")
 
-    return OperabilityVerdict("keep", "series temporales, datos que tenemos, regla identificable")
+    # keep — con la marca de test incremental para volume profile.
+    vp = _hits(text, _VOLUME_PROFILE) is not None
+    razon = "series temporales/microestructura, datos dentro de presupuesto, regla identificable"
+    if vp:
+        razon += " · volume profile → requiere test INCREMENTAL vs niveles simples"
+    return OperabilityVerdict("keep", razon, requiere_test_incremental=vp)
 
 
-def apply(conn, hyp_id: str, candidate: dict | None = None) -> OperabilityVerdict:
+def apply(conn, hyp_id: str, candidate: dict | None = None, *,
+          budget_usd: float = DATA_BUDGET_USD) -> OperabilityVerdict:
     """Correr el triaje sobre una fila de la DB y persistir el resultado."""
     from src.pipeline import db
 
     row = candidate or db.get(conn, hyp_id)
     if row is None:
         raise KeyError(hyp_id)
-    verdict = triage_operability(row)
+    verdict = triage_operability(row, budget_usd=budget_usd)
     update = {
         "id": hyp_id,
         "triage_operabilidad": verdict.decision,
         "triage_operabilidad_razon": verdict.razon,
         "operable_en_prop": 1 if verdict.decision == "keep" else 0,
+        "requiere_test_incremental": 1 if verdict.requiere_test_incremental else 0,
     }
     if verdict.decision == "reject":
-        update["estado"] = "rechazada_operabilidad"
+        update["estado"] = {
+            "falsabilidad": "rechazada_por_falsabilidad",
+            "datos": "rechazada_por_datos",
+            "operabilidad": "rechazada_operabilidad",
+        }.get(verdict.categoria, "rechazada_operabilidad")
     db.upsert(conn, update)
     return verdict

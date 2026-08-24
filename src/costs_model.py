@@ -99,3 +99,70 @@ def sharpe_activo_requerido(duty_cycle: float) -> float:
     edge; el argumento de COT es la INFORMACIÓN no-de-precio, no un listón más bajo.
     """
     return 0.40 / (duty_cycle ** 0.5) + 0.245
+
+
+# ============================================================================
+# INTRADÍA — el suelo de costes cambia de régimen: lo domina el ROTAR, no el
+# mantener. El modelo swing de arriba (margen diario) no aplica; el coste es
+# comisión + spread por operación × frecuencia.
+# ============================================================================
+
+TRADING_DAYS_INTRADAY = 252  # sesiones/año (convención estándar intradía)
+
+# Specs CONTRACTUALES de CME (tick/point value son definiciones del contrato, estables)
+# + comisión IBKR ~$4.20 round-trip all-in (interactivebrokers.com, ya citado en
+# docs/futures_case.md). `notional_usd` SÍ depende del nivel de precio → se fija a un
+# nivel declarado (2026-08, orden de magnitud; RECALCULAR a precio corriente antes de
+# usar en decisión real). `spread_ticks` = ancho típico del front (1 tick en ES/NQ/GC/CL).
+CONTRACT_SPECS = {
+    #        tick_usd  notional_usd  comision_rt  spread_ticks   (nivel de precio asumido)
+    "ES": {"tick_usd": 12.50, "notional_usd": 300_000, "comision_rt": 4.20, "spread_ticks": 1},  # ES~6000×$50
+    "NQ": {"tick_usd":  5.00, "notional_usd": 400_000, "comision_rt": 4.20, "spread_ticks": 1},  # NQ~20000×$20
+    "CL": {"tick_usd": 10.00, "notional_usd":  75_000, "comision_rt": 4.20, "spread_ticks": 1},  # CL~$75×1000
+    "GC": {"tick_usd": 10.00, "notional_usd": 240_000, "comision_rt": 4.20, "spread_ticks": 1},  # GC~$2400×100
+}
+
+
+def costo_anual_intraday(trades_por_dia: float, contrato: str = "ES", *,
+                         trading_days: int = TRADING_DAYS_INTRADAY,
+                         specs: dict | None = None) -> float:
+    """Coste anual (fracción del notional) de rotar `trades_por_dia` veces al día.
+
+        costo_anual = trades_por_dia · trading_days · (comision_rt + spread_$) / notional
+
+    `trades_por_dia` cuenta ROUND-TRIPS (por eso se usa la comisión round-trip). El
+    `spread_$` es el coste de cruzar el spread una vez por round-trip (1 tick en el
+    front líquido). El mantener (margen) es despreciable en intradía → se omite.
+    """
+    sp = specs if specs is not None else CONTRACT_SPECS.get(contrato)
+    if sp is None:
+        raise ValueError(f"contrato desconocido: {contrato!r} (usa {list(CONTRACT_SPECS)} o pasa specs=)")
+    spread_usd = sp["spread_ticks"] * sp["tick_usd"]
+    costo_por_rt = sp["comision_rt"] + spread_usd
+    return trades_por_dia * trading_days * costo_por_rt / sp["notional_usd"]
+
+
+def sharpe_bruto_requerido_intraday(trades_por_dia: float, contrato: str = "ES", *,
+                                    umbral: float = 0.40, vol_objetivo: float = 0.08,
+                                    trading_days: int = TRADING_DAYS_INTRADAY,
+                                    specs: dict | None = None) -> float:
+    """Bruto Sharpe requerido para netear `umbral`, en régimen INTRADÍA.
+
+        bruto_requerido = umbral + costo_anual_intraday / vol_objetivo
+
+    Nota de vehículo: el intradía de microestructura sólo tiene sentido en FUTUROS
+    (el spot/CFD no tiene volumen consolidado ni cinta); el `contrato` ES/NQ/CL/GC
+    parametriza el suelo, como el `vehiculo` parametriza el suelo swing.
+    """
+    costo = costo_anual_intraday(trades_por_dia, contrato,
+                                 trading_days=trading_days, specs=specs)
+    return umbral + costo / vol_objetivo
+
+
+def trades_por_dia_break_1p96(contrato: str = "ES", *, specs: dict | None = None,
+                              trading_days: int = TRADING_DAYS_INTRADAY) -> float:
+    """A cuántos round-trips/día el coste intradía IGUALA el 1.96%/año del margen CFD
+    (el suelo que mató seis hipótesis). Por encima de esto, intradía es MÁS caro que
+    el swing en CFD. Es la advertencia principal de la tabla."""
+    por_trade_dia = costo_anual_intraday(1.0, contrato, trading_days=trading_days, specs=specs)
+    return 0.0196 / por_trade_dia
