@@ -45,6 +45,16 @@ def test_extract_from_pdf_seam_requires_llm():
         extract.extract_from_pdf("paper.pdf")
 
 
+def test_figure_only_numeric_goes_null_with_flag_not_invented():
+    # regla (c): un numérico sin cita (típico: sólo en una figura) → null + requiere_lectura_manual,
+    # NUNCA un valor inventado.
+    r = extract.validate_extraction(_good_ficha(bruto_reportado=1.2, cita_bruto=None))
+    assert r.accepted                                   # sigue siendo hipótesis válida
+    assert r.ficha["bruto_reportado"] is None           # NO se transcribe el número de la figura
+    assert "bruto_reportado" in r.dropped_fields
+    assert r.ficha.get("requiere_lectura_manual") == 1  # marcado para lectura manual
+
+
 # ---------------------------------------------- Estación 5: revisión adversaria
 def _all_pass():
     return {k: True for k, _q, _c in adversarial.ATTACK_QUESTIONS}

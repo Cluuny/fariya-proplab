@@ -38,8 +38,14 @@ operable_en_prop: true            # swing, diario, sin cross-sectional de accion
 razon_si_no: null
 
 # --- RESULTADO ORIGINAL ---
-periodo_original: "1965-2009"
-sharpe_reportado: 1.2             # portafolio de 58 futuros — NO es nuestro listón (ver n_instrumentos)
+periodo_original: "1985-2009"     # CORREGIDO (D1): el paper reporta post-1985 como primario
+                                  # (§2.3 p.15, §4.1 p.16); 1965-2009 era sólo robustez de datos extendidos.
+sharpe_reportado: null            # CORREGIDO (D2): antes 1.2, pero está en Figure 2 (gráfico), sin cita en texto.
+sharpe_reportado_nota: >
+  El paper no reporta un Sharpe puntual en texto; el ~1.2 se lee de Figure 2. Se mantiene
+  como referencia CUALITATIVA sin cita verificable. Requiere lectura manual de la figura si
+  se necesita el número. (Las derivaciones congeladas más abajo conservan el 1.2/1965
+  histórico; esta corrección es el registro, no reescribe lo comprometido — ver enmiendas.)
 max_dd_reportado: null
 n_operaciones: ">2000"
 costos_incluidos: true
@@ -243,3 +249,19 @@ enmiendas:
       si el deflated Sharpe > 0.4, si no parked); conteo de intentos = 4 (2
       lookbacks × 2 muestras, swaps no cuentan) para no inflar el deflated Sharpe;
       recipe ex-ante del escalar en un solo paso (sin bucle de convergencia).
+  - fecha: 2026-08-24
+    tipo: correccion_procedencia_post_ejecucion
+    que: >
+      D1: periodo_original de MOP corregido 1965-2009 -> 1985-2009 (el 1965 era nota de
+      robustez, §2.3 p.15/§4.1 p.16). D2: sharpe_reportado 1.2 -> null (está en Figure 2,
+      sin cita verificable en texto).
+    afecta_veredicto: NO
+    afecta_expectativas_futuras: SI
+    detalle: >
+      El 1.2 se usó como ancla de Grinold-Kahn para derivar la expectativa comprometida de
+      H001 (sharpe_central 0.40). El input estaba mal citado, así que parte del sesgo de
+      calibración medido (+0.057) no era sólo fallo del marco sino del ancla. Cualquier
+      expectativa FUTURA de trend debe usar una referencia con cita verificable. El veredicto
+      (muerta, neto < 0.2 por márgenes que ningún ajuste del ancla salva) NO cambia. Las
+      derivaciones congeladas (resultado_esperado, holdout_razon) conservan el 1.2/1965
+      histórico a propósito; esta enmienda es el registro de la corrección.

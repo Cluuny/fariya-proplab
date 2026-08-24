@@ -101,12 +101,14 @@ CREATE TABLE IF NOT EXISTS hipotesis (
     holdout                  TEXT,
     -- registro de aprendizaje (los tres números que calibran el programa)
     bruto_esperado           REAL,          -- committeado ANTES de correr
+    ancla_defectuosa         INTEGER,       -- 1 si bruto_esperado se derivó de un ancla mal citada (D2)
     bruto_medido             REAL,          -- post-ejecución
     duty_cycle_real          REAL,          -- post-ejecución
     causa_de_muerte          TEXT,          -- coste|amplitud|efecto_inexistente|datos|falsabilidad|concentracion
     veredicto                TEXT,
     -- estaciones 4-5 (extracción / revisión adversaria)
     cita_bruto               TEXT,          -- ubicación (sección/tabla) del bruto extraído; sin cita → null
+    requiere_lectura_manual  INTEGER,       -- 1 si un numérico sólo está en una figura → null + lectura manual
     adversarial_veredicto    TEXT,          -- keep | reject (estación 5)
     adversarial_razon        TEXT,
     -- cola

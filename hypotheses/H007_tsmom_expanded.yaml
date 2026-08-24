@@ -55,8 +55,13 @@ operable_en_prop: true
 razon_si_no: null
 
 # --- RESULTADO ORIGINAL / EVIDENCIA EXTERNA ---
-periodo_original: "1965-2009"
-sharpe_reportado: 1.2             # 58 futuros — NO es nuestro listón (menos amplitud)
+periodo_original: "1985-2009"     # CORREGIDO (D1): el paper reporta post-1985 como primario
+                                  # (§2.3 p.15, §4.1 p.16); 1965-2009 era sólo robustez de datos extendidos.
+sharpe_reportado: null            # CORREGIDO (D2): antes 1.2, pero está en Figure 2 (gráfico), sin cita en texto.
+sharpe_reportado_nota: >
+  El paper no reporta un Sharpe puntual en texto; el ~1.2 se lee de Figure 2. Referencia
+  CUALITATIVA sin cita verificable; requiere lectura manual de la figura. Las derivaciones
+  congeladas (resultado_esperado) conservan el 1.2 histórico — ver enmiendas.
 veredicto_externo: confirmado_con_degradacion
 replicaciones_encontradas:
   - "AQR (2017): confirma OOS"
@@ -240,3 +245,18 @@ enmiendas:
       el factor recalculado √(5.32/3.73)=1.194 → bruto_esperado [0.29, 0.37].
       (3) convención de conteo anotada: deflated Sharpe con N=5 (familia tras esta
       corrida).
+  - fecha: 2026-08-24
+    tipo: correccion_procedencia_post_ejecucion
+    que: >
+      D1: periodo_original de MOP corregido 1965-2009 -> 1985-2009 (el 1965 era nota de
+      robustez, §2.3 p.15/§4.1 p.16). D2: sharpe_reportado 1.2 -> null (está en Figure 2,
+      sin cita verificable en texto).
+    afecta_veredicto: NO
+    afecta_expectativas_futuras: SI
+    detalle: >
+      El 1.2 se usó como ancla de Grinold-Kahn para derivar bruto_esperado [0.29, 0.37]
+      (H001 bruto × 1.194). El input estaba mal citado, así que parte del sesgo de
+      calibración medido (+0.057) no era sólo fallo del marco sino del ancla. Cualquier
+      expectativa FUTURA de trend debe usar una referencia con cita verificable. El veredicto
+      (muerta, neto A 0.184 / B 0.040 < 0.2) NO cambia. Las derivaciones congeladas conservan
+      el 1.2/1965 histórico; esta enmienda es el registro.

@@ -30,6 +30,7 @@ BACKFILL: list[dict] = [
         "fuente": "reviewer", "n_instrumentos": 9,
         "datos_requeridos": ["precio_ohlc"], "operable_en_prop": 1,
         "bruto_esperado": 0.40,   # resultado_esperado.sharpe_central (IR Grinold-Kahn)
+        "ancla_defectuosa": 1,    # el ancla 1.2 de MOP estaba mal citada (D2) → expectativa no limpia
         "bruto_medido": 0.28,     # gross ~0.244-0.308
         "duty_cycle_real": 1.0,
         "estado": "muerta", "veredicto": "falsada (neto A 0.078 / B 0.135 < 0.2)",
@@ -100,6 +101,7 @@ BACKFILL: list[dict] = [
         "fuente": "reviewer", "n_instrumentos": 17,
         "datos_requeridos": ["precio_ohlc"], "operable_en_prop": 1,
         "bruto_esperado": 0.33,   # rango ficha [0.29, 0.37]
+        "ancla_defectuosa": 1,    # derivado de H001 bruto × 1.194, con el ancla 1.2 mal citada (D2)
         "bruto_medido": 0.370,    # muestra A (primaria); B 0.229
         "duty_cycle_real": 1.0,
         "estado": "muerta", "veredicto": "falsada (neto A 0.184 / B 0.040); marco UNDERPOWERED",
