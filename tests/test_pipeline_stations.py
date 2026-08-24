@@ -80,6 +80,19 @@ def test_adversarial_missing_axis_counts_against():
     assert adversarial.evaluate(f).veredicto == "reject"
 
 
+def test_adversarial_has_blind_test_axes():
+    keys = {k for k, _q, _c in adversarial.ATTACK_QUESTIONS}
+    assert "autores_independientes" in keys           # añadido tras el test ciego
+    assert "literatura_previa_posterior" in keys
+
+
+def test_author_independence_is_non_critical_flag():
+    # una "confirmación" no independiente se MARCA pero no rechaza sola (no invalida el efecto)
+    f = _all_pass(); f["autores_independientes"] = False
+    r = adversarial.evaluate(f)
+    assert r.veredicto == "keep" and "autores_independientes" in r.failed_axes
+
+
 # ---------------------------------------------- Estación 6: generación de stub
 def test_stub_generation_has_fixed_contract():
     code = stub_gen.generate_stub(_good_ficha(id="H099", titulo="Test",

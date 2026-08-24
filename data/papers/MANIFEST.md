@@ -46,8 +46,30 @@ Una entrada por paper. `estado: presente` = el PDF está en `data/papers/` y su 
 - año: 1987
 - publicación: Journal of Financial Economics 18(1)
 - DOI / arXiv: 10.1016/0304-405X(87)90066-3
-- obtenido de: (pendiente — Google Scholar "A Monthly Effect in Stock Returns" filetype:pdf)
+- obtenido de: —
 - fecha de descarga: —
 - SHA256: —
-- usado en: H003 (origen histórico del efecto TOM)
-- estado: pendiente
+- usado en: H003 (como CITA de origen, no como fuente extraída)
+- estado: no_obtenible
+- nota: >
+    PDF no localizado en fuentes abiertas (búsqueda 2026-08). La CITA se conserva: el paper
+    existe y respalda la genealogía del efecto TOM (Ariel 1987 -> McConnell & Xu 2008). Lo que
+    falta es el archivo, no la referencia. La extracción de H003 se hizo sobre McConnell & Xu.
+
+## hurst2017_trend.pdf
+- título: A Century of Evidence on Trend-Following Investing
+- autores: Hurst, Ooi & Pedersen
+- año: 2017
+- publicación: The Journal of Portfolio Management 44(1) (AQR Capital)
+- DOI / arXiv: SSRN 2993026
+- obtenido de: https://static.twentyoverten.com/.../A-Century-of-Evidence-on-Trend-Following-Investing.pdf
+- fecha de descarga: 2026-08-24
+- SHA256: 666f19c81a6932809fa69bb4f8746e531bb71912be7f554ce233eef73eb21d7c
+- usado en: test ciego del adversario (sustituto de Ariel; NO es una hipótesis del proyecto)
+- estado: presente
+- nota: >
+    Sustituto para el test ciego. Ooi y Pedersen son 2 de los 3 autores de Moskowitz-Ooi-
+    Pedersen (2012): una "confirmación" del trend firmada por los mismos autores del hallazgo
+    original NO es independiente. Ése era el eje ciego. Material de gestora (AQR), no arbitrado
+    igual que un journal; backtest a un siglo sobre datos reconstruidos (calidad en décadas
+    tempranas).

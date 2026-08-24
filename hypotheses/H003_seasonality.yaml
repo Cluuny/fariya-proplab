@@ -49,6 +49,9 @@ operable_en_prop: true            # long-only índices, swing, turnover MUY bajo
 razon_si_no: null
 
 # --- RESULTADO ORIGINAL ---
+# NOTA (change adversarial-blind-test, 2026-08-24): la CITA de Ariel (1987) se conserva como
+# origen del efecto TOM, pero su PDF es no_obtenible (data/papers/MANIFEST.md) — la extracción
+# de esta familia se hizo sobre McConnell & Xu (2008), no sobre Ariel.
 periodo_original: "Ariel 1963-1981; McConnell-Xu 1926-2005 (y OOS internacional)"
 sharpe_reportado: null            # los papers reportan CONCENTRACIÓN del retorno en la ventana, no un Sharpe limpio
 efecto_reportado: >
