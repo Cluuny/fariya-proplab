@@ -26,9 +26,16 @@ DEFAULT_DB_PATH = Path("data/pipeline/research.db")
 # Vocabularios controlados (documentan los valores válidos; SQLite no los fuerza).
 CLASES_DE_DATO = (
     "precio", "macro", "flujo", "fundamental", "estructura_temporal", "calendario",
+    "volatilidad_implicita",   # opciones cripto (Deribit/DVOL) — la clase que faltaba desde H004
 )
 FRECUENCIAS = ("EOD", "intraday_bar", "tick", "orderbook")
 FUENTES_DE_LA_IDEA = ("pipeline", "humano", "reviewer")
+TIPOS_DE_FUENTE = (
+    "paper_arbitrado", "preprint", "blog", "reddit", "twitter", "discord", "youtube",
+)
+CAUSAS_DE_MUERTE = (
+    "coste", "amplitud", "efecto_inexistente", "datos", "falsabilidad", "concentracion",
+)
 ESTADOS = (
     "candidato",          # recién descubierto, sin triar
     "rechazada_operabilidad",
@@ -55,6 +62,7 @@ CREATE TABLE IF NOT EXISTS hipotesis (
     fecha                    TEXT,
     fuente                   TEXT,          -- arxiv | alpha_architect | cxo | ssrn | manual
     fuente_de_la_idea        TEXT,          -- pipeline | humano | reviewer   (registro de aprendizaje)
+    tipo_de_fuente           TEXT,          -- paper_arbitrado|preprint|blog|reddit|twitter|discord|youtube
     -- clasificación
     familia                  TEXT,
     mecanismo                TEXT,
@@ -95,7 +103,12 @@ CREATE TABLE IF NOT EXISTS hipotesis (
     bruto_esperado           REAL,          -- committeado ANTES de correr
     bruto_medido             REAL,          -- post-ejecución
     duty_cycle_real          REAL,          -- post-ejecución
+    causa_de_muerte          TEXT,          -- coste|amplitud|efecto_inexistente|datos|falsabilidad|concentracion
     veredicto                TEXT,
+    -- estaciones 4-5 (extracción / revisión adversaria)
+    cita_bruto               TEXT,          -- ubicación (sección/tabla) del bruto extraído; sin cita → null
+    adversarial_veredicto    TEXT,          -- keep | reject (estación 5)
+    adversarial_razon        TEXT,
     -- cola
     score_prioridad          REAL,
     estado                   TEXT NOT NULL DEFAULT 'candidato',
@@ -105,8 +118,12 @@ CREATE TABLE IF NOT EXISTS hipotesis (
 );
 CREATE INDEX IF NOT EXISTS idx_estado   ON hipotesis(estado);
 CREATE INDEX IF NOT EXISTS idx_clase    ON hipotesis(clase_de_dato);
+CREATE INDEX IF NOT EXISTS idx_fuente   ON hipotesis(tipo_de_fuente);
 CREATE INDEX IF NOT EXISTS idx_prioridad ON hipotesis(estado, score_prioridad);
 """
+
+# Condición de parada del pipeline (docs/pipeline_stop_condition.md).
+N_CONDICION_PARADA = 200
 
 # Columnas que aceptan una lista y se guardan como JSON.
 _JSON_COLS = {"datos_requeridos"}
@@ -187,3 +204,10 @@ def next_in_queue(conn: sqlite3.Connection) -> dict | None:
 
 def all_rows(conn: sqlite3.Connection) -> list[dict]:
     return [dict(r) for r in conn.execute("SELECT * FROM hipotesis ORDER BY id").fetchall()]
+
+
+def count_processed(conn: sqlite3.Connection) -> int:
+    """Candidatos PROCESADOS (atravesaron al menos el triaje): estado != 'candidato'.
+    Es el numerador de la condición de parada (procesados / N_CONDICION_PARADA)."""
+    return conn.execute(
+        "SELECT COUNT(*) FROM hipotesis WHERE estado != 'candidato'").fetchone()[0]

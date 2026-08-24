@@ -42,6 +42,17 @@ def _rows_por_frecuencia(conn) -> list[dict]:
     return [dict(r) for r in conn.execute(sql).fetchall()]
 
 
+def _rows_por_tipo_fuente(conn) -> list[dict]:
+    sql = """
+        SELECT tipo_de_fuente AS tipo, COUNT(*) AS n,
+               SUM(CASE WHEN estado IN ('viable','en_cola','pre_registrado')
+                        THEN 1 ELSE 0 END) AS vivas
+        FROM hipotesis WHERE tipo_de_fuente IS NOT NULL
+        GROUP BY tipo_de_fuente ORDER BY n DESC, tipo ASC
+    """
+    return [dict(r) for r in conn.execute(sql).fetchall()]
+
+
 def _calibracion(conn) -> list[dict]:
     """Filas realmente CORRIDAS a un veredicto de Sharpe con esperado y medido."""
     sql = """
@@ -64,9 +75,14 @@ def report(conn) -> str:
         _SURVIVED,
     ).fetchone()[0]
 
+    from src.pipeline import db
+
+    procesados = db.count_processed(conn)
     lines = ["# Reporte de aprendizaje del pipeline", ""]
-    lines.append(f"Total de hipótesis registradas: **{total}** · supervivientes "
-                 f"(estado viable/en_cola/pre_registrado): **{vivas}**")
+    lines.append(f"**Condición de parada: {procesados} / {db.N_CONDICION_PARADA} candidatos "
+                 f"procesados.** (docs/pipeline_stop_condition.md)")
+    lines.append(f"Total registradas: **{total}** · supervivientes "
+                 f"(viable/en_cola/pre_registrado): **{vivas}**")
     lines.append("")
 
     # 1 + 2: distribución y supervivencia por clase.
@@ -93,6 +109,53 @@ def report(conn) -> str:
     lines.append("|---|---|---|")
     for r in _rows_por_frecuencia(conn):
         lines.append(f"| {r['frecuencia']} | {r['n']} | {r['vivas']} |")
+    lines.append("")
+
+    # distribución + supervivencia por tipo de fuente (¿producen las no académicas algo testeable?)
+    lines.append("## Distribución y supervivencia por tipo de fuente")
+    lines.append("")
+    lines.append("| tipo_de_fuente | n | vivas | rechazadas | tasa rechazo |")
+    lines.append("|---|---|---|---|---|")
+    for r in _rows_por_tipo_fuente(conn):
+        rej = r["n"] - r["vivas"]
+        lines.append(f"| {r['tipo']} | {r['n']} | {r['vivas']} | {rej} | {(rej/r['n']) if r['n'] else 0:.0%} |")
+    lines.append("")
+    lines.append("La tasa de rechazo por tipo de fuente es un RESULTADO: dice si las fuentes "
+                 "no académicas (reddit/twitter/discord/youtube) producen algo testeable o sólo "
+                 "contenido. Todas pasan por los mismos filtros.")
+    lines.append("")
+
+    # causa de muerte
+    lines.append("## Causa de muerte")
+    lines.append("")
+    lines.append("| causa | n |")
+    lines.append("|---|---|")
+    for causa, n in conn.execute(
+        "SELECT causa_de_muerte, COUNT(*) FROM hipotesis WHERE causa_de_muerte IS NOT NULL "
+        "GROUP BY causa_de_muerte ORDER BY COUNT(*) DESC").fetchall():
+        lines.append(f"| {causa} | {n} |")
+    lines.append("")
+
+    # EL TEST del pipeline: ¿sobreviven más las ideas del pipeline que las del reviewer?
+    lines.append("## ¿Vale la pena el pipeline? (supervivencia pipeline vs reviewer)")
+    lines.append("")
+    lines.append("| fuente_de_la_idea | n | vivas | tasa supervivencia |")
+    lines.append("|---|---|---|---|")
+    for fte, n, v in conn.execute(
+        "SELECT fuente_de_la_idea, COUNT(*), "
+        "SUM(CASE WHEN estado IN ('viable','en_cola','pre_registrado') THEN 1 ELSE 0 END) "
+        "FROM hipotesis WHERE fuente_de_la_idea IS NOT NULL GROUP BY fuente_de_la_idea").fetchall():
+        lines.append(f"| {fte} | {n} | {v} | {(v/n) if n else 0:.0%} |")
+    lines.append("")
+    lines.append("**Éste es el test de si el pipeline valió la pena:** que las ideas del "
+                 "pipeline sobrevivan MÁS que las del reviewer. Hoy sólo hay reviewer (backfill); "
+                 "el número se llena cuando el pipeline produzca candidatos.")
+    lines.append("")
+
+    # SESGO A EVITAR (registrado explícitamente)
+    lines.append("> SESGO A EVITAR: no se favorece a macro/fundamentales/volatilidad 'porque "
+                 "parecen las buenas'. La evidencia es 1 de 2 (carry acertó con 0.282, COT dio "
+                 "cero exacto). La supervivencia por clase se MIDE, no se asume.")
     lines.append("")
 
     # 3: calibración.

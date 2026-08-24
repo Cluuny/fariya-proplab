@@ -21,6 +21,8 @@ from __future__ import annotations
 import urllib.request
 import xml.etree.ElementTree as ET
 
+from src.pipeline.db import TIPOS_DE_FUENTE
+
 ARXIV_API = "http://export.arxiv.org/api/query"
 ARXIV_CATS = ("q-fin.PM", "q-fin.ST", "q-fin.TR")
 # q-fin.TR (Trading & Market Microstructure) está infrarrepresentado en el barrido por
@@ -77,6 +79,7 @@ def parse_arxiv_atom(xml_text: str) -> list[dict]:
             "fecha": _txt("published")[:10],
             "fuente": "arxiv",
             "fuente_de_la_idea": "pipeline",
+            "tipo_de_fuente": "preprint",
             "estado": "candidato",
         })
     return out
@@ -114,6 +117,7 @@ def parse_rss(xml_text: str, source: str) -> list[dict]:
             "fecha": _txt("pubDate")[:16],
             "fuente": source,
             "fuente_de_la_idea": "pipeline",
+            "tipo_de_fuente": "blog",
             "estado": "candidato",
         })
     return out
@@ -130,16 +134,30 @@ def fetch_rss(source: str, url: str | None = None) -> list[dict]:
 
 
 # ---------------------------------------------------------------- SSRN manual
-def manual_candidate(url: str, titulo: str, abstract: str = "", fecha: str = "") -> dict:
-    """Build a candidate from a hand-entered SSRN (or other) URL — no API available."""
+def manual_candidate(url: str, titulo: str, abstract: str = "", fecha: str = "",
+                     tipo_de_fuente: str = "paper_arbitrado") -> dict:
+    """Build a candidate from a hand-entered URL — SSRN (sin API) o fuentes NO académicas
+    (Reddit, Twitter/X, Discord, YouTube). `tipo_de_fuente` etiqueta el origen; TODAS pasan
+    por los MISMOS filtros. Una afirmación sin regla/universo/mecanismo/falsador NO es
+    hipótesis, es contenido, y la estación 2 la rechaza. La tasa de rechazo por tipo de
+    fuente es un RESULTADO del pipeline (learning_report)."""
+    if tipo_de_fuente not in TIPOS_DE_FUENTE:
+        raise ValueError(f"tipo_de_fuente inválido: {tipo_de_fuente!r} (usa {list(TIPOS_DE_FUENTE)})")
+    low = (url or "").lower()
+    fuente = ("ssrn" if "ssrn" in low else
+              "reddit" if "reddit" in low else
+              "twitter" if ("twitter" in low or "x.com" in low) else
+              "youtube" if ("youtube" in low or "youtu.be" in low) else
+              "discord" if "discord" in low else "manual")
     return {
-        "id": f"manual:{_slug(url or titulo)}",
+        "id": f"{fuente}:{_slug(url or titulo)}",
         "titulo": titulo,
         "abstract": abstract,
         "url": url,
         "fecha": fecha,
-        "fuente": "ssrn" if "ssrn" in (url or "").lower() else "manual",
+        "fuente": fuente,
         "fuente_de_la_idea": "humano",
+        "tipo_de_fuente": tipo_de_fuente,
         "estado": "candidato",
     }
 

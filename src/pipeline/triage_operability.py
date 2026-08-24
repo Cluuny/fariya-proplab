@@ -24,7 +24,11 @@ import re
 from dataclasses import dataclass
 
 # Presupuesto de datos por defecto (USD/mes). Configurable en `apply`.
-DATA_BUDGET_USD = 60.0
+# 125 USD/mes (≈500k COP, decisión del operador). Admite Norgate futures EOD (~$50), Binance
+# (gratis), Deribit opciones cripto (gratis), BIS/FRED/CFTC/LOBSTER (gratis). NO admite:
+# opciones de acciones/SPX, Databento ($199/$1750, además BANEADO por ToS), Polygon ($199),
+# IQFeed (~$133, frontera). Ver docs/research_pipeline.md y docs/pipeline_stop_condition.md.
+DATA_BUDGET_USD = 125.0
 
 # --- FALSABILIDAD: rechazadas por no medir un dato externo (ICT/SMC) ---
 _NON_FALSIFIABLE = (

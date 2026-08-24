@@ -204,3 +204,84 @@ como conjunto de validación de los filtros nuevos:
   la falsabilidad se comprueba ANTES que el presupuesto.
 
 El reporte de aprendizaje añade la **distribución por frecuencia** (EOD 7, intraday_bar 2).
+
+---
+
+# Pipeline COMPLETO — estaciones 4-7, fuentes no académicas, presupuesto $125 (change research-pipeline-full)
+
+Motivo estructural: 7 de las 8 familias con veredicto salieron del reviewer; 5 de 8 fueron
+precio puro; nunca se leyó un paper completo. **El pipeline existe para romper esa
+dependencia y se juzga por si produce supervivientes que el reviewer NO habría propuesto.**
+
+Parámetros del operador: **presupuesto de datos $125/mes**, **condición de parada 200
+candidatos** (`docs/pipeline_stop_condition.md`), alcance estaciones 1-7.
+
+## Presupuesto de datos — $125/mes (precios verificados 2026-08-24)
+
+| ADMITE | precio | habilita |
+|---|---|---|
+| Norgate futures EOD | ~$50/mes ($270/año) | swing en futuros, continuos roll-adjusted |
+| Binance data.binance.vision | gratis (ya ingerido) | order book / trades cripto |
+| **Deribit API pública** | **gratis** | **opciones cripto BTC/ETH, DVOL — volatility risk premium (la clase que faltaba desde H004)** |
+| BIS / FRED / CFTC COT | gratis (ya ingeridos) | macro, posicionamiento |
+| LOBSTER samples | gratis | order book de muestra |
+
+| NO ADMITE (rechazo en estación 2, precio anotado) | precio |
+|---|---|
+| Opciones de acciones / SPX (gamma, 0DTE sobre índices) | ≫ $125 |
+| Databento Standard / Plus | $199 / $1.750 |
+| Polygon | $199 |
+| IQFeed | ~$133 (**frontera**, marginalmente por encima) |
+| dxFeed, CQG | enterprise |
+
+**REGISTRADO: Databento BANEADO** (violación de ToS por múltiples cuentas). NO se crean
+cuentas nuevas en ningún proveedor para evadir límites.
+
+## Estación 1 ampliada — fuentes NO académicas
+
+Además de arXiv/RSS: **Reddit, Twitter/X, Discord, YouTube** por ingesta manual de URLs
+(`discover.manual_candidate(..., tipo_de_fuente=...)`). **Condición innegociable:** pasan por
+los MISMOS filtros. Una afirmación sin regla operativa, sin universo, sin mecanismo y sin
+falsador NO es hipótesis, es contenido — y la estación 2 la rechaza. La **tasa de rechazo por
+tipo de fuente** es un resultado del pipeline (learning_report): dice si las no académicas
+producen algo testeable.
+
+## Estación 3 recalibrada — listones medidos de ambos ciclos
+
+`triage_costs.LISTONES_REFERENCIA`: CFD swing 8% → **0.64**; cripto perp mejor caso → **0.65**
+(maker+1rt/día+funding evitado); capital propio 20% vol → **0.50** (SÓLO si la vol extra viene
+de instrumentos más volátiles al mismo notional, NO de apalancamiento — coste/vol invariante,
+verificado); duty bajo → Sharpe ACTIVO requerido `0.40/√duty+0.245` (SUBE, no baja).
+
+## Estaciones 4-7 (nuevas)
+
+- **4. Extracción** (`extract.py`): PDF completo → ficha, structured output. Dos reglas
+  anti-alucinación IMPUESTAS por validación: (a) cada campo numérico exige **cita de
+  ubicación** (sección/tabla) o va a null; (b) **sin falsador escribible, se rechaza por
+  esquema** (no se acumulan "ideas interesantes"). La llamada LLM es el `seam`.
+- **5. Revisión adversaria** (`adversarial.py`): segundo agente, prompt DISTINTO, único
+  trabajo destruir la ficha. Ocho ejes de ataque; los críticos incluyen las lecciones de H003
+  (¿benchmark cero o comparte exposición?) y del OFI (¿contemporáneo o PREDICTIVO?). Un eje
+  crítico fallado → reject. Los LLM son aduladores hacia el texto que leen; el adversario lo
+  contrarresta.
+- **6. Generación de stub** (`stub_gen.py`): ficha aprobada → función en `signals.py` con el
+  contrato fijo (precios→pesos) y `NotImplementedError`. El motor no cambia; la señal se
+  implementa a mano contra el contrato, no la inventa el LLM.
+- **7. Compuerta humana** (`human_gate.py`): 15 min/mes, 3-5 candidatos, se aprueba UNO
+  (→ pre_registrado). El pipeline no auto-aprueba nada.
+
+## Registro de aprendizaje — campos nuevos
+
+`tipo_de_fuente` (paper_arbitrado/preprint/blog/reddit/twitter/discord/youtube),
+`causa_de_muerte` (coste/amplitud/efecto_inexistente/datos/falsabilidad/concentracion),
+`clase_de_dato` +`volatilidad_implicita`. Consultas con SQL (learning_report): supervivencia
+por clase y por tipo de fuente, calibración de expectativas, y **la clave — ¿sobreviven más
+las ideas del pipeline que las del reviewer?** (el test de si el pipeline valió la pena).
+
+## Backfill = conjunto de validación (11)
+
+Las 8 con veredicto (H001/H002/H003/H005/H006/H007/COT/OFI, todas fuente=reviewer) + H004
+(rechazada_por_datos; **Deribit la reabre**) + AMT/volume profile (rechazada_por_datos) +
+ICT/SMC (rechazada_por_falsabilidad). Reproduce los veredictos conocidos: cero supervivientes,
+**5/8 precio** entre las familias, **8/8 reviewer**, causa de muerte dominada por coste (5).
+Si el pipeline no los reprodujera, estaría mal construido.

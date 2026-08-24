@@ -135,8 +135,8 @@ BACKFILL: list[dict] = [
         "estado": "rechazada_por_datos",
         "veredicto": (
             "rechazada por DATOS: volume profile intradía necesita barras 1-min + volumen "
-            "consolidado (IQFeed ~$133/mo) > presupuesto $60/mo; Norgate (EOD, ~$22.50/mo) NO "
-            "lo habilita. Además requeriría test INCREMENTAL vs niveles simples (máx/mín N días)."),
+            "consolidado (IQFeed ~$133/mo) > presupuesto $125/mo (frontera); Norgate (EOD, "
+            "~$22.50/mo) NO lo habilita. Además requeriría test INCREMENTAL vs niveles simples."),
         "bruto_esperado": None, "bruto_medido": None, "duty_cycle_real": None, "fecha_test": None,
     },
     {
@@ -158,19 +158,75 @@ BACKFILL: list[dict] = [
             "no de estilo ni prejuicio."),
         "bruto_esperado": None, "bruto_medido": None, "duty_cycle_real": None, "fecha_test": None,
     },
+    # --- OFI order flow (ciclo cripto): validado contemporáneo, cerrado por decaimiento/coste ---
+    {
+        "id": "OFI",
+        "titulo": "Order Flow Imbalance (Cont-Kukanov-Stoikov) en BTCUSDT perp",
+        "familia": "microstructure", "mecanismo": "presión de flujo en el mejor nivel",
+        "estructura": "time_series", "direccionalidad": "long_short",
+        "clase_de_dato": "flujo", "fuente_de_la_idea": "reviewer",
+        "fuente": "reviewer", "n_instrumentos": 1,
+        "frecuencia": "orderbook",
+        "requiere_volumen_consolidado": 1, "requiere_cinta_tick": 1, "requiere_order_book_l2": 0,
+        "costo_datos_usd_mes": 0.0,     # data.binance.vision gratis
+        "datos_requeridos": ["bookTicker", "aggTrades"], "operable_en_prop": 1,
+        # bruto_esperado None: fue un DIAGNÓSTICO de cribado, no un run pre-registrado con
+        # expectativa de gross comprometida → no entra en la calibración (como COT/H005).
+        "bruto_esperado": None,
+        "bruto_medido": 0.0,      # predictivo ~0 (contemporáneo R² 0.64 pero NO predice)
+        "duty_cycle_real": None,
+        "estado": "cribada_fuera",
+        "veredicto": ("validado contemporáneo (R² 0.64) pero PREDICTIVO ~0; ratio señal/coste "
+                      "0.009-0.039 (coste 25-100×) → order flow cerrado como familia"),
+        "fecha_test": "2026-08-24",
+    },
+    # --- H004 volatility risk premium: estuvo fuera por datos; Deribit lo REABRE ---
+    {
+        "id": "H004",
+        "titulo": "Volatility risk premium (opciones)",
+        "familia": "vol_premium", "mecanismo": "prima por seguro (IV > RV)",
+        "estructura": "time_series", "direccionalidad": "short_vol",
+        "clase_de_dato": "volatilidad_implicita", "fuente_de_la_idea": "reviewer",
+        "fuente": "reviewer", "n_instrumentos": 2,
+        "frecuencia": "EOD",
+        "costo_datos_usd_mes": 0.0,   # Deribit API pública GRATIS (BTC/ETH, DVOL) — reabre la clase
+        "datos_requeridos": ["opciones_iv", "dvol"], "operable_en_prop": 1,
+        "bruto_esperado": None, "bruto_medido": None, "duty_cycle_real": None,
+        "estado": "rechazada_por_datos",
+        "veredicto": ("fue rechazada por DATOS (necesitaba opciones/vol implícita, no teníamos). "
+                      "Deribit (gratis, opciones cripto BTC/ETH + DVOL) REABRE la clase; candidata "
+                      "a re-evaluar vía el pipeline con el presupuesto de $125/mes."),
+        "fecha_test": None,
+    },
 ]
+
+# Causa de muerte por id (registro de aprendizaje).
+_CAUSA_MUERTE = {
+    "H001": "coste", "H002": "concentracion", "H003": "efecto_inexistente",
+    "H005": "coste", "H006": "coste", "H007": "coste", "COT": "efecto_inexistente",
+    "OFI": "coste", "MP001": "datos", "ICT001": "falsabilidad", "H004": "datos",
+}
+# tipo_de_fuente para las de origen humano/comunidad (las reviewer → paper_arbitrado por defecto).
+_TIPO_FUENTE = {"MP001": "blog", "ICT001": "youtube"}
 
 
 def load_backfill(conn) -> int:
-    """Upsert the known hypotheses (7 EOD + 2 microestructura). Returns count. Idempotent.
+    """Upsert las 11 hipótesis conocidas (8 con veredicto + H004 datos + AMT + ICT). Idempotente.
 
-    Las 7 originales son EOD y coste de datos 0 (default aplicado aquí); las 2 de
-    microestructura declaran su frecuencia y coste explícitamente.
+    Es el CONJUNTO DE VALIDACIÓN: si el pipeline no reproduce estos veredictos al pasarlas por
+    sus filtros, está mal construido. Defaults: EOD, coste 0. tipo_de_fuente = paper_arbitrado
+    para las del reviewer (vinieron de papers); causa_de_muerte por id.
     """
     from src.pipeline import db
 
     db.init_db(conn)
     for rec in BACKFILL:
-        rec = {"frecuencia": "EOD", "costo_datos_usd_mes": 0.0, **rec}  # default EOD/gratis
+        default_tipo = "paper_arbitrado" if rec.get("fuente_de_la_idea") == "reviewer" else "blog"
+        rec = {
+            "frecuencia": "EOD", "costo_datos_usd_mes": 0.0,
+            "tipo_de_fuente": _TIPO_FUENTE.get(rec["id"], default_tipo),
+            "causa_de_muerte": _CAUSA_MUERTE.get(rec["id"]),
+            **rec,   # los valores explícitos del dict ganan
+        }
         db.upsert(conn, rec)
     return len(BACKFILL)
