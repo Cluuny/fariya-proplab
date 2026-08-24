@@ -78,6 +78,38 @@ El extractor y el adversario fueron el **MISMO modelo** en la corrida de validac
 lista salió de errores que YA conocíamos. **NO está demostrado que el adversario detecte un
 fallo NO anticipado.** Ese test sólo llega con papers nuevos.
 
-**MITIGACIÓN COMPROMETIDA:** los primeros **20 candidatos** de la corrida real se leen
-ÍNTEGROS por el operador, aunque el adversario diga KEEP. Recién después se confía en el
-filtro adversario sin lectura completa.
+**MITIGACIÓN COMPROMETIDA (actualizada tras el test ciego, ver abajo):** los primeros **40
+candidatos** de la corrida real se leen ÍNTEGROS por el operador, aunque el adversario diga
+KEEP. Recién después se confía en el filtro adversario sin lectura completa.
+
+## Test ciego del adversario (change adversarial-blind-test, 2026-08-24)
+
+Se buscó un eje que NO le enseñamos al adversario y ver si lo detecta solo. Sustituto: AQR,
+"A Century of Evidence on Trend-Following Investing" (Hurst, **Ooi & Pedersen**, 2017;
+`hurst2017_trend.pdf`). **Eje ciego:** Ooi y Pedersen son 2 de los 3 autores de
+Moskowitz-Ooi-Pedersen (2012) → una "confirmación" del trend firmada por los mismos autores
+del hallazgo original NO es independiente. Ese conflicto no estaba en los 8 ejes.
+
+**RESULTADO: NO DETECTADO.** Sin interpretar a favor, por dos razones:
+1. **Contaminación de este experimento:** el operador reveló el eje ciego en el MISMO prompt
+   que corría el adversario (el mismo modelo). No puedo auto-certificar "detección espontánea"
+   habiendo sido informado. Un test ciego limpio exige que el adversario NO haya visto la
+   respuesta — sólo se puede correr en una sesión futura que no lo sepa.
+2. **Límite ESTRUCTURAL (lo más importante):** el adversario implementado (`adversarial.evaluate`)
+   sólo acepta un `findings` dict con las claves de `ATTACK_QUESTIONS`. **No hay canal para una
+   objeción novel** como la no-independencia autoral: aunque un modelo la notara, el sistema no
+   podría registrarla. Con los 8 ejes originales, AQR pasaba como KEEP (sólo se marcaba
+   degradación); el conflicto autoral, el "material de gestora no arbitrado" y la calidad de
+   datos de las décadas tempranas quedaban FUERA.
+
+**Evidencia sobre el alcance del adversario (no aprobado/suspenso):** el adversario caza lo que
+enumeramos; un fallo genuinamente NO anticipado no tiene dónde registrarse y no hay garantía de
+que se detecte. De ahí la lectura humana íntegra de los primeros 40.
+
+**Remediación aplicada (rama "no detectado"):**
+- Mitigación 20 → **40** candidatos leídos íntegros.
+- Dos ejes NUEVOS en la estación 5 (`adversarial.ATTACK_QUESTIONS`):
+  `autores_independientes` (¿los autores son los mismos del hallazgo original?) y
+  `literatura_previa_posterior` (¿qué dice la literatura previa/posterior?). Con ellos
+  explícitos, AQR ya marca `autores_independientes` (y `sesgo_supervivencia` por la calidad de
+  datos del siglo) — pero eso es porque AÑADIMOS el eje, no porque el adversario lo descubriera.

@@ -23,6 +23,11 @@ ATTACK_QUESTIONS = [
     ("degradacion_post_pub", "¿evidencia post-publicación de degradación?", False),
     ("contemporaneo_vs_predictivo", "¿el resultado es CONTEMPORÁNEO o PREDICTIVO? (H003/OFI)", True),
     ("benchmark_cero", "¿el benchmark es CERO o comparte la exposición de la estrategia? (H003 beta)", True),
+    # AÑADIDOS tras el test ciego (change adversarial-blind-test): el adversario NO detectó
+    # espontáneamente la no-independencia autoral (no estaba en la lista y el findings dict no
+    # tenía canal para un eje novel). Ahora son ejes explícitos.
+    ("autores_independientes", "¿los autores del paper son los mismos del hallazgo original? (independencia de la replicación)", False),
+    ("literatura_previa_posterior", "¿existe literatura previa o posterior sobre este mismo efecto, y qué dice?", False),
 ]
 CRITICAL_KEYS = {k for k, _, crit in ATTACK_QUESTIONS if crit}
 

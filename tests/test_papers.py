@@ -61,6 +61,19 @@ def test_resolve_unknown_id_fails_visibly(corpus):
     assert "no está en el manifiesto" in str(ei.value)
 
 
+def test_no_obtenible_is_a_valid_state(tmp_path):
+    man = tmp_path / "MANIFEST.md"
+    man.write_text("## gone1987_x.pdf\n- título: Gone\n- SHA256: —\n- estado: no_obtenible\n")
+    e = papers.parse_manifest(man)
+    assert e["gone1987_x"]["estado"] == "no_obtenible"   # distinto de 'pendiente'
+
+
+def test_real_manifest_ariel_no_obtenible():
+    e = papers.parse_manifest()
+    assert e["ariel1987_tom"]["estado"] == "no_obtenible"
+    assert "hurst2017_trend" in e   # sustituto del test ciego catalogado
+
+
 def test_real_manifest_parses_and_is_consistent():
     """El manifiesto real del repo parsea y sus entradas presentes cuadran en SHA256
     (si los PDFs están; si no, se omite — son gitignored)."""

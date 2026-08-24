@@ -35,8 +35,13 @@ def main() -> int:
     missing_sha_warn = False
     for pid, e in sorted(entries.items()):
         path = papers.PAPERS_DIR / e["filename"]
+        estado = e.get("estado", "?")
         if not path.exists():
-            print(f"  [ausente]  {pid}  (estado: {e.get('estado','?')})")
+            if estado == "no_obtenible":
+                # estado VÁLIDO: la cita se conserva, el archivo no es obtenible (no es un pendiente real)
+                print(f"  [no_obtenible] {pid}  (cita conservada; sin archivo, no falla)")
+            else:
+                print(f"  [ausente]  {pid}  (estado: {estado})")
             continue
         actual = papers.sha256_file(path)
         recorded = e.get("sha256")
