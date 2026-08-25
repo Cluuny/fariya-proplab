@@ -93,6 +93,16 @@ def test_author_independence_is_non_critical_flag():
     assert r.veredicto == "keep" and "autores_independientes" in r.failed_axes
 
 
+def test_null_geometry_axis_is_critical():
+    # eje añadido tras H008: un nulo que sólo aleatoriza la entrada (geometría rota) CORROMPE
+    # el veredicto → crítico, rechaza. N/A (sin nulo) se pasa como True y no dispara.
+    keys = {k for k, _q, _c in adversarial.ATTACK_QUESTIONS}
+    assert "nulo_preserva_geometria" in keys
+    f = _all_pass(); f["nulo_preserva_geometria"] = False
+    r = adversarial.evaluate(f)
+    assert r.veredicto == "reject" and "nulo_preserva_geometria" in r.failed_axes
+
+
 # ---------------------------------------------- Estación 6: generación de stub
 def test_stub_generation_has_fixed_contract():
     code = stub_gen.generate_stub(_good_ficha(id="H099", titulo="Test",

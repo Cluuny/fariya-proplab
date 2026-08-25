@@ -4,9 +4,10 @@ Segundo agente, prompt DISTINTO, único trabajo: DESTRUIR la ficha. No resume ni
 forma balanceada. Razón: los LLM son estructuralmente aduladores hacia el texto que leen; un
 revisor que sólo busca fallos contrarresta ese sesgo.
 
-Las ocho preguntas de ataque (cada una devuelve un veredicto por eje). Si CUALQUIER eje
+Las preguntas de ataque (cada una devuelve un veredicto por eje). Si CUALQUIER eje
 crítico falla, la ficha se rechaza. Las lecciones de H003 (describir≠predecir; benchmark que
-comparte exposición) y del OFI (contemporáneo≠predictivo) están codificadas como ejes.
+comparte exposición), del OFI (contemporáneo≠predictivo) y de H008 (el nulo debe preservar la
+geometría, no sólo aleatorizar la entrada) están codificadas como ejes.
 """
 
 from __future__ import annotations
@@ -28,6 +29,13 @@ ATTACK_QUESTIONS = [
     # tenía canal para un eje novel). Ahora son ejes explícitos.
     ("autores_independientes", "¿los autores del paper son los mismos del hallazgo original? (independencia de la replicación)", False),
     ("literatura_previa_posterior", "¿existe literatura previa o posterior sobre este mismo efecto, y qué dice?", False),
+    # AÑADIDO tras H008 (change h008-verdict): el nulo de H008 aleatorizaba el punto de entrada
+    # pero NO reposicionaba objetivo/stop → el objetivo podía nacer del lado equivocado (geometría
+    # rota). El nulo daba Sharpe -3.4 en todos los percentiles y "superar el p95" no significaba
+    # "hay efecto" sino "mejor que niveles absurdos". Ninguno de los 8 ejes anteriores lo habría
+    # detectado. CRÍTICO como benchmark_cero: un nulo deshonesto CORROMPE el veredicto (fabrica un
+    # falso "supera al nulo → la señal lleva información"). N/A (sin nulo) → el eje se supera (True).
+    ("nulo_preserva_geometria", "si hay benchmark nulo: ¿preserva la GEOMETRÍA de la estrategia (objetivo/stop reposicionados coherentemente respecto a la entrada aleatoria), o sólo aleatoriza el punto de entrada? (H008)", True),
 ]
 CRITICAL_KEYS = {k for k, _, crit in ATTACK_QUESTIONS if crit}
 
@@ -62,7 +70,7 @@ def evaluate(findings: dict) -> AdversarialResult:
             veredicto="keep",
             razon=f"supera los ejes críticos; observaciones no críticas: {failed}",
             failed_axes=failed)
-    return AdversarialResult(veredicto="keep", razon="supera los ocho ejes de ataque", failed_axes=[])
+    return AdversarialResult(veredicto="keep", razon="supera todos los ejes de ataque", failed_axes=[])
 
 
 def apply(conn, hyp_id: str, findings: dict) -> AdversarialResult:

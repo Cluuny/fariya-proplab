@@ -228,9 +228,9 @@ holdout_detalle: >
 
 # --- GESTIÓN DE COLA ---
 score_prioridad: null
-estado: no_promociona          # Bloque 4: no viable (activo -0.067 ≪ listón 0.961); (1) underpowered
+estado: muerta                 # change h008-verdict: MUERTA. Activo -0.067 ≪ listón 0.961; con fills ≥5bps -0.986. No viable bajo ningún supuesto.
 intentos_realizados: 1
-fecha_test: "2026-08-24"
+fecha_test: "2026-08-24"       # el Bloque 4 se corrió el 24; el sellado del veredicto (h008-verdict) es del 25, sin re-correr nada
 
 # --- ENMIENDAS (pre-ejecución; se pueden fortalecer hasta que fecha_test != null) ---
 enmiendas:
@@ -384,3 +384,44 @@ resultado:
       → el veredicto NO cambia (sigue no viable). ADVERTENCIA: el modelo de fills nunca se construyó.
     expectativa: "resultado_esperado (Δ≈0/negativo, veredicto muerta-por-redundancia o underpowered) CUMPLIDA en dirección: no promueve; (1) underpowered."
     holdout: "INTACTO — no se tocó (no pasó in-sample). No se descarga."
+  cierre:
+    # change h008-verdict: SELLADO del veredicto + correcciones de registro.
+    # NO se tocó falsador ni resultado_esperado (congelados desde fecha_test != null).
+    fecha: 2026-08-25
+    veredicto: MUERTA
+    razon: >
+      Sharpe ACTIVO de la rama perfil -0.067 ≪ listón 0.961 → no viable. Con el supuesto de
+      fills REALISTA (fill sólo si el precio cruza ≥5 bps) EMPEORA a -0.986. No es viable bajo
+      ningún supuesto: el supuesto de fills afecta la MAGNITUD, no el veredicto.
+    matiz_del_veredicto: >
+      H008 NO murió por REDUNDANCIA — la coincidencia del 26% [23,28] descartó esa vía (los
+      niveles de perfil marcan precios DISTINTOS de los simples: POC vs VWAP mediana 32 bps
+      sobre 1094 días). Murió porque la REGLA DE SUBASTA no funciona, con niveles de perfil o
+      sin ellos: fadear extensiones en un mercado momentum-driven pierde dinero en 341 episodios
+      / 18 meses / 2 instrumentos (BTC/ETH).
+    nulo_defectuoso:
+      # Se registra igual que se registró la coincidencia MAL EMPAREJADA: un test defectuoso.
+      distribucion: "catastróficamente negativa en TODOS los percentiles (p5 -4.85, p50 -3.43, p95 -2.04, p99 -1.49); ningún remuestreo de 1000 se acerca a cero."
+      causa_mecanica: >
+        La salida es objetivo=POC y stop=1× rango del VA. Con entrada en un nivel ALEATORIO
+        dentro del rango del día, el POC puede quedar DETRÁS de la entrada → la posición nace con
+        el objetivo del lado equivocado y sólo puede terminar en stop o time-stop. El nulo no mide
+        "sin información", mide "GEOMETRÍA ROTA". Comparar: la rama perfil alcanza objetivo el 68%
+        (D6); un nulo bien construido debería rondar el 50%, no producir Sharpe -3.4.
+      consecuencia: >
+        La condición (3) del falsador NO DISCRIMINA. Superar el p95 significa "mejor que niveles
+        absurdos", no "hay efecto". Se RETIRA del veredicto la afirmación 'supera al nulo → los
+        niveles de perfil llevan información vs fading aleatorio': no está soportada.
+      diseno_correcto_futuro: >
+        Para fichas futuras (no se re-corre): el nulo debe PRESERVAR LA GEOMETRÍA — nivel de
+        entrada aleatorio pero con objetivo y stop reposicionados coherentemente respecto a esa
+        entrada, de forma que la distancia objetivo/stop sea la misma que en la rama real.
+    sesgo_de_exclusion_pareado:
+      # (4) el pareado sobre los compartidos es válido, pero la submuestra está sesgada.
+      excluidos: "73 episodios (341 perfil vs 268 compartidos)"
+      naturaleza: >
+        NO son una muestra aleatoria: son los días donde la banda de 1 día quedó MÁS LEJOS que el
+        borde del VA → sesgados hacia RANGO AMPLIO. El Δ sobre los compartidos es interpretable,
+        pero la submuestra no es representativa.
+      diseno_correcto_futuro: "definir los episodios de forma que AMBOS niveles sean alcanzables por construcción."
+    holdout: "NUNCA descargado. Intacto. No se toca (H008 no pasó in-sample)."
