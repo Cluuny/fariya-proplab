@@ -339,3 +339,28 @@ resultado:
       VAL≈banda_inf 5% (53 bps), POC≈VWAP 18% (32 bps), cualquiera 26% [23,28]. La condición (2)
       NO dispara ni con el emparejamiento y timescale correctos sobre la muestra completa. La
       redundancia NO queda establecida. results/crypto/h008_redundancy_1day.md.
+  filtro_de_rechazo:
+    # change h008-rejection-filter: MEDIR el duty real (edge-touch + rechazo), sin backtest.
+    fecha: 2026-08-24
+    edge_touch: "643 (duty edge 59%, cota superior)"
+    rechazo_confirmado: "341 (el mid re-entra al VA en ≤3 barras de 1 min) → supervivencia 53% del edge-touch"
+    duty_real: 0.31                                   # entre el 0.20 a priori y el 0.59 de solo-touch
+    T_efectiva: "~189-341 (descuento ρ0.8) → ≥ 150; poder suficiente, NO underpowered"
+  desviacion_del_preregistro:
+    # (4) desviación material del pre-registro, VISIBLE (sin tocar falsador/resultado_esperado).
+    duty_a_priori: 0.20
+    duty_medido: 0.31
+    liston_recalculado_sobre_duty_real:
+      sharpe_activo_requerido: 0.961                  # 0.40/√0.31+0.245 (a priori 20% → 1.139)
+      round_trips_dia: 0.31
+      requerido_bruto_cripto: 0.476                   # maker, funding evitado, 0.31 rt/día
+      binding: >
+        El listón EFECTIVO es el Sharpe ACTIVO ~0.96 (más alto que el suelo de coste 0.48): el
+        edge de los períodos activos debe ser ~0.96 para netear 0.40 tras diluir sobre el 69% flat.
+        MÁS BAJO que el 1.14 a priori (duty real 31% > 20%), pero sigue alto.
+  expectativa_refutada:
+    # (5) resultado_esperado (congelado) queda REFUTADO — registrado como tal, resultado limpio.
+    esperado: "coincidencia >60-80%, redundancia (el VAH sería redundante con niveles simples)"
+    medido: "26% [23,28] con emparejamiento y timescale correctos sobre 1094 días; POC vs VWAP mediana 32 bps"
+    veredicto: "REFUTADA. Los niveles de perfil NO son redundantes con niveles simples — el perfil marca precios DISTINTOS."
+    matiz: "DISTINTOS ≠ MEJORES. Que sean mejores (aporten Δ Sharpe) lo decide el Bloque 4."
