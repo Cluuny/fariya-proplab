@@ -1,0 +1,201 @@
+# =============================================================================
+# H008 — Auction Market Theory / Volume Profile en cripto (BTCUSDT perp)
+# Ficha de PRE-REGISTRO (protocolo anti-autoengaño §3.5/§3.6/§7.1).
+# SÓLO LA FICHA. El FALSADOR y la regla testeable se escriben ANTES de correr nada.
+# Cero código, cero corridas, cero acceso a datos hasta que esta ficha se revise.
+# =============================================================================
+
+id: H008
+
+# --- JUSTIFICACIÓN DE REAPERTURA (documentada primero) ---
+reapertura:
+  estado_previo: rechazada_por_datos   # AMT/volume profile (MP001 en el pipeline)
+  por_que_ahora: >
+    AMT/volume profile quedó rechazada_por_datos porque NO había volumen consolidado: FX es
+    OTC y el "volumen" de Dukascopy es conteo de ticks de un broker, no volumen real por nivel
+    de precio. Esa restricción CAMBIÓ: hay libro de órdenes completo de cripto, GRATIS, ya
+    ingerido y validado (bookTicker BTCUSDT 18.5M eventos/día + aggTrades, calidad verificada,
+    docs/ofi_validation.md, data/raw_crypto). El volumen traded por nivel de precio —el input
+    que define VAH/VAL/POC— ahora EXISTE y es medible. Es el mismo tipo de argumento EXTERNO
+    que justificó H007 tras la ampliación de universo: la restricción que la mató desapareció,
+    no "a ver si esta vez sí".
+  fuera_de_condicion_de_parada: true   # H008 = novena familia, FUERA de las 200 (pipeline)
+  nota_parada: >
+    La condición de parada del programa (docs/program_verdict.md) se declaró cumplida (8 de 8).
+    H008 entra como novena familia SÓLO por el cambio de restricción de datos, con esta
+    justificación explícita; NO es buscar el candidato 201 por corazonada.
+
+# --- FUENTE ---
+fuente:
+  tipo: no_arbitrado                   # ver nota_literatura
+  cita: "Auction Market Theory (Steidlmayer, Market Profile); volume profile (VAH/VAL/POC)"
+  url: null
+  fecha_publicacion: null
+nota_literatura: >
+  NO hay literatura ARBITRADA que valide volume profile como fuente de edge (a diferencia de
+  Cont-Kukanov-Stoikov para OFI, o Moskowitz para trend). Es folklore de trading
+  (Steidlmayer/CBOT Market Profile), sin Sharpe reportado creíble. Por eso la expectativa
+  comprometida (abajo) NO se ancla en un bruto de literatura sino en un argumento de
+  REDUNDANCIA (los niveles de perfil coinciden con niveles simples gratis).
+
+# --- CLASIFICACIÓN ---
+familia: microstructure
+mecanismo: >
+  Teoría de subasta: el mercado subasta hasta encontrar valor; el precio tiende a rechazar
+  extensiones fuera del área de valor (VAH/VAL) y volver al POC (precio de mayor volumen). La
+  hipótesis operable es la aceptación/rechazo FUERA del área de valor.
+explicacion_economica: conductual + estructura de subasta (no verificada empíricamente)
+estructura: time_series
+direccionalidad: mean_reversion        # fade de extensiones fuera del VA hacia el POC
+clase_de_dato: flujo                   # volumen traded por nivel de precio
+frecuencia: intraday_bar
+
+# --- OPERABILIDAD / DATOS (fijados AHORA) ---
+instrumentos: [BTCUSDT]                # UN instrumento para empezar; ETHUSDT sólo si el pipeline funciona
+n_instrumentos: 1
+datos_requeridos:
+  - "aggTrades (volumen traded por nivel de precio → define el perfil)"
+  - "bookTicker (mid para ejecución/entradas; ya ingerido y validado)"
+datos_ya_disponibles: true             # data.binance.vision, gratis, ya ingerido (Bloque 1 cripto)
+costo_datos_usd_mes: 0
+ventana_de_perfil: "rodante de 24 h previas (perfil DIARIO); VAH/VAL = área de valor del 70%
+  alrededor del POC; POC = bucket de mayor volumen"
+bucket_de_precio: "$10 (100 ticks de $0.10) — primario; $5 como ÚNICO chequeo de robustez"
+operable_en_prop: true
+
+# --- HIPÓTESIS TESTEABLE (versión INCREMENTAL, innegociable) ---
+hipotesis: >
+  NO "¿funciona el volume profile?" sino: ¿el VAH/VAL/POC aporta información INCREMENTAL sobre
+  niveles de precio SIMPLES (máx/mín de N períodos, medias móviles, bandas de vol)?
+diseno_incremental:
+  regla_base: >
+    La MISMA regla condicional (abajo) corrida con dos conjuntos de niveles:
+      (a) SIMPLES: máx/mín del día previo, SMA(20), bandas de Bollinger(20, 2σ).
+      (b) PERFIL: VAH/VAL/POC del perfil de 24 h previas.
+  medida: >
+    Δ Sharpe = Sharpe(perfil) − Sharpe(simple), con IC95 por BOOTSTRAP PAREADO por episodios
+    (mismas fechas/episodios en ambas ramas). Si el VAH aporta, Δ > 0 con IC que no cruza 0.
+  coincidencia: >
+    Reportar el % de episodios en que VAH ≈ máx-N-días DENTRO DE TOLERANCIA (|VAH − máx_N|/precio
+    ≤ 0.10% = 10 bps) y análogo VAL≈mín-N. Si la coincidencia > 80%, la maquinaria de perfiles
+    es infraestructura cara para reproducir algo gratis — y ESO ES el hallazgo (suficiente por sí
+    solo para muerte por redundancia).
+
+# --- VERSIÓN CONDICIONAL (el diseño que sí puede funcionar) ---
+condicional:
+  motivo: >
+    El trader discrecional NO OPERA cuando no ve nada claro; nuestro cribado del OFI midió el
+    efecto PROMEDIO sobre todos los intervalos y por eso no vio nada. La hipótesis debe ser
+    CONDICIONAL: fade fuera del área de valor SÓLO en contextos identificables EX-ANTE, con duty
+    bajo por diseño.
+  contexto_deterministico: >
+    Activo SÓLO si (1) el día PREVIO fue de BALANCE/rango: (high−low)_prev / ATR(14 diario) < 1.0
+    (compresión de rango, subasta equilibrada, conocido al inicio de sesión); Y (2) el precio
+    extiende MÁS ALLÁ del borde del área de valor del perfil previo (por encima del VAH o por
+    debajo del VAL). NO "cuando el mercado está claro" — ambas condiciones son deterministas y
+    ex-ante.
+  regla_entrada: >
+    En régimen de balance, al extenderse fuera del VA y mostrar RECHAZO (el mid re-entra al VA
+    dentro de K=3 barras de 1 min), entrar fade hacia el POC con orden LÍMITE (maker) en el borde
+    del VA. Dirección: short si extensión por encima del VAH, long si por debajo del VAL.
+  regla_salida: >
+    Objetivo = POC; stop = distancia fija más allá del borde (1× rango del VA); time-stop al
+    cierre de la sesión de 24 h. Un round-trip por episodio.
+  duty_cycle_estimado: 0.20            # ~20% del tiempo (días de balance × toque de borde)
+
+# --- SUELO DE COSTES (calculado ANTES) ---
+suelo_de_costes:
+  round_trips_por_dia_estimado: 0.5    # pocos setups/semana; 1 rt por episodio
+  fraccion_maker: 1.0                  # órdenes límite en el borde del VA
+  funding_evitado: true                # intradía, cierra antes de los cortes 00/08/16 UTC
+  requerido_bruto_cripto: 0.523        # sharpe_bruto_requerido_cripto(0.5, maker, sin funding)
+  # TRAMPA YA MEDIDA (registrarla): duty bajo SUBE el Sharpe ACTIVO requerido.
+  trampa_duty_bajo: >
+    sharpe_activo_requerido(duty) = 0.40/√duty + 0.245 → duty 20% = 1.139, 10% = 1.510. Ser
+    selectivo NO es gratis: aunque el coste de rotación es bajo (0.52 bruto a 0.5 rt/día maker),
+    el Sharpe del PERÍODO ACTIVO tiene que ser ~1.14 para que, diluido sobre el 80% flat, la serie
+    complete un neto de 0.40. El listón EFECTIVO es el mayor: ~1.14 de Sharpe activo. Muy alto.
+  contra_literatura: >
+    No hay bruto de literatura arbitrada para volume profile (ver nota_literatura). No se puede
+    contrastar contra un número creíble; ésa es una debilidad estructural de la familia.
+
+# --- BENCHMARK NULO (lección de H003) ---
+benchmark_nulo:
+  descripcion: >
+    El benchmark NO es cero. Debe COMPARTIR la exposición: misma dirección (fade), mismo número
+    de barras en mercado y mismos episodios, pero con NIVELES DE ENTRADA elegidos AL AZAR (precio
+    aleatorio dentro del rango del día en vez de VAH/VAL/POC).
+  remuestreos: 1000
+  semilla: 20260824                    # fija, para reproducibilidad
+  reporte: "p95 de la distribución nula del Sharpe (activo)"
+  # El FALSADOR se juzga RELATIVO al p95 del nulo, NO a un Sharpe absoluto.
+
+# --- PODER ESTADÍSTICO (lección de H003) ---
+poder_estadistico:
+  formula: "SE(Ŝ) ≈ √((1 + S²/2)/T), T = nº de EPISODIOS independientes (no barras)"
+  episodios_estimados: >
+    ~1 setup por día activo × duty 20% × 365 ≈ 73 episodios/año por instrumento. Para T ≥ 150
+    (SE ≈ 0.087, IC95 ±0.17 con S~0.5) se necesitan ≥ 2 años de BTCUSDT (o añadir ETHUSDT). Con
+    1 año (T ~ 73) → SE ≈ 0.12, IC95 ±0.24: probablemente INSUFICIENTE para separar el falsador
+    del umbral.
+  muestra_a_adquirir: ">= 2 años de BTCUSDT (2022-2024) para T >= 150; si no, el veredicto puede
+    ser 'underpowered'."
+  estado_underpowered_disponible: true
+
+# --- EXPECTATIVA COMPROMETIDA (escrita ANTES, con derivación) ---
+resultado_esperado:
+  delta_perfil_menos_simple_esperado: "≈ 0 (o negativo)"
+  coincidencia_esperada: "> 60-80% (VAH ≈ máx-día / número redondo)"
+  derivacion: >
+    Los bordes del área de valor están determinados por dónde el precio pasó TIEMPO/volumen, que
+    en la práctica coincide con máximos/mínimos recientes y números redondos — los mismos que
+    marcan los niveles SIMPLES gratis. Por eso se espera alta coincidencia y Δ ≈ 0: el perfil
+    reproduce niveles simples con maquinaria cara. Sin literatura arbitrada que sugiera lo
+    contrario, la expectativa base es REDUNDANCIA.
+  que_seria_redundante: >
+    "El VAH es redundante con niveles simples" = Δ Sharpe (perfil − simple) ≤ 0 con IC que no
+    excluye 0, Y coincidencia VAH≈máx-N > 80%. Ése es el resultado que se espera y que, de darse,
+    ES el hallazgo (no un fracaso).
+  veredicto_esperado: "muerta por redundancia, o underpowered si T < ~100"
+
+# --- FALSADOR (congelado, disparable) ---
+FALSADOR: >
+  H008 se descarta si SE CUMPLE CUALQUIERA:
+   (1) Δ Sharpe (perfil − simple, bootstrap pareado) ≤ 0 O su IC95 cruza 0  → VAH redundante.
+   (2) coincidencia VAH≈máx-N-días > 80% (tolerancia 10 bps)  → infraestructura cara para algo
+       gratis (hallazgo suficiente por sí solo).
+   (3) Sharpe ACTIVO de la estrategia de perfil < p95 del nulo (niveles al azar, misma exposición)
+       → no hay efecto sobre el benchmark que comparte exposición.
+  No se reintenta con variantes salvo UN ÚNICO chequeo de robustez pre-especificado (bucket $5 en
+  vez de $10) y CONTADO (deflated Sharpe con N=2). Si el veredicto in-sample no distingue el
+  falsador del umbral por poder, el estado es 'underpowered' y NO se toca el holdout.
+
+metrica_exito: >
+  Para PROMOVER (a confirmación en holdout) TODAS: Δ Sharpe (perfil − simple) > 0 con IC95 que no
+  cruza 0; coincidencia < 80%; Sharpe activo > p95 del nulo Y > el requerido efectivo (~1.14 a
+  duty 20%). El Sharpe es invariante al apalancamiento.
+
+# --- HOLDOUT ---
+holdout: respetado
+holdout_detalle: >
+  Sagrado: últimos 6 meses de la muestra adquirida, reservados; se tocan UNA vez, sólo si H008
+  pasa in-sample (Δ>0, coincidencia<80%, activo>p95 y >requerido). Si muere o sale underpowered
+  in-sample, el holdout NO se toca.
+
+# --- GESTIÓN DE COLA ---
+score_prioridad: null
+estado: pre_registrado
+intentos_realizados: 0
+fecha_test: null
+
+# --- ENMIENDAS (pre-ejecución; se pueden fortalecer hasta que fecha_test != null) ---
+enmiendas:
+  - fecha: 2026-08-24
+    tipo: pre_ejecucion
+    que: >
+      Pre-registro inicial. Reapertura justificada por el cambio de restricción de datos (libro
+      de cripto gratis). Diseño INCREMENTAL (Δ perfil − simple, bootstrap pareado) + CONDICIONAL
+      (contexto de balance determinista, duty 20%). Benchmark nulo con exposición compartida y
+      niveles al azar (semilla fija, p95). Suelo de costes cripto (0.52 bruto a 0.5 rt/día maker)
+      y la trampa de duty bajo (Sharpe activo requerido 1.14). Poder: T≥150 exige ≥2 años; estado
+      'underpowered' disponible. Falsador congelado y disparable con un único chequeo de robustez.
