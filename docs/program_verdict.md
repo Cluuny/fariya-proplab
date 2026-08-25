@@ -4,11 +4,11 @@ Este es el documento de referencia del programa. Cubre AMBOS ciclos —el univer
 pivote a cripto/order flow— con los números completos y sin adornos. Se consultará dentro
 de un año: debe bastar por sí solo.
 
-Dos ciclos, ocho familias con veredicto, **cero supervivientes**. No es un fracaso: es lo
+Dos ciclos, nueve familias con veredicto, **cero supervivientes**. No es un fracaso: es lo
 que produce un programa con falsadores honestos, suelo de costes medido y veredictos sin
 adornos cuando el vehículo y los datos no dan un edge que supere el suelo.
 
-## Las ocho familias, con veredicto y números (1.1)
+## Las nueve familias, con veredicto y números (1.1)
 
 | familia | ciclo | veredicto | números clave |
 |---|---|---|---|
@@ -20,9 +20,12 @@ adornos cuando el vehículo y los datos no dan un edge que supere el suelo.
 | **H006** intermarket / macro | CFD | **rechazada** (coste) | price-based, duty 100% → requerido 0.64; sin evidencia de bruto alto (lead-lag decaído) |
 | **COT** posicionamiento | CFD | **cribada** | Sharpe activo del fade ≈ 0 (agrupado −0.02, IC cruza 0); signo del mecanismo roto en 5/8 |
 | **OFI** order flow | cripto | **cribada** | contemporáneo validado (R² 0.64) pero predictivo ~0; ratio señal/coste 0.009-0.039 (coste 25-100×) |
+| **H008** subasta / volume profile (AMT) | cripto | **muerta** (falsada) | Sharpe activo del fade -0.067 ≪ listón 0.961 (con fills ≥5bps -0.986); niveles de perfil NO redundantes con simples (coincidencia 26%) pero la regla de subasta no da edge |
 
 (H004 volatility risk premium quedó **fuera por datos** — necesita opciones/vol implícita —
-sin llegar a veredicto de familia; no cuenta entre las ocho.)
+sin llegar a veredicto de familia; no cuenta entre las familias con veredicto. La novena,
+**H008**, entró por la vía que este mismo documento exige — salió del pipeline de investigación
+(MP001, reabierta), no de una corazonada — se testeó y murió.)
 
 ## Las conclusiones MEDIDAS de ambos ciclos (1.2)
 
@@ -56,7 +59,7 @@ sin llegar a veredicto de familia; no cuenta entre las ocho.)
    Grinold-Kahn sobreestime. **Conclusión honesta: no hay calibración de expectativas
    todavía** — con dos anclas defectuosas y una corrida underpowered, la métrica empieza a
    existir sólo cuando el pipeline produzca corridas con ancla citable
-   (`docs/extraction_defects.md`, reporte del pipeline). El VEREDICTO de las ocho NO cambia.
+   (`docs/extraction_defects.md`, reporte del pipeline). El VEREDICTO de las nueve NO cambia.
 
 ## Los dos hallazgos empíricos PROPIOS (1.3)
 
@@ -75,6 +78,23 @@ las acciones: en cripto los precios son MENOS resilientes que su book display, n
 formación de precios en cripto está más impulsada por TRADES que por QUOTES. Implicación
 práctica: gran parte de la señal contemporánea vive en los aggTrades (archivos ~10× más
 pequeños que el bookTicker).
+
+## Los dos hallazgos limpios de H008 (1.3b)
+
+De la novena familia (subasta / volume profile en BTC/ETH perp, 1094 días-instrumento):
+
+**a) Los niveles de perfil NO son redundantes con niveles simples.** Coincidencia
+26% [23,28] con emparejamiento y timescale correctos; POC vs VWAP mediana 32 bps. El
+POC/VAH/VAL marca precios DISTINTOS de una banda de volatilidad o un VWAP. La expectativa
+COMPROMETIDA de la ficha (coincidencia >60-80%, redundancia) queda **REFUTADA** — un
+resultado limpio, no un fallo de ejecución.
+
+**b) La regla de fade de subasta sobre esos niveles NO produce edge.** Distintos ≠ mejores:
+el fade de extensiones hacia el POC da Sharpe activo -0.067 (con fills ≥5bps -0.986), muy
+por debajo del listón 0.961, en 341 episodios / 18 meses / 2 instrumentos. En un mercado
+momentum-driven, fadear la extensión pierde dinero. (El benchmark nulo original sugería que
+"los niveles llevan información", pero era un test defectuoso — geometría rota, objetivo del
+lado equivocado con entrada aleatoria — y se retiró del veredicto; ver `docs/h008_block4.md` D4.)
 
 ## Corrección metodológica del Bloque B (1.4)
 
@@ -97,13 +117,16 @@ Condición de parada del programa, textual:
 > respaldado por la literatura, el programa se detiene: el cuello de botella no es de método
 > sino de acceso a datos/vehículo, y no se busca una familia más por corazonada."
 
-**Cumplida: 8 de 8 familias con veredicto, cero supervivientes.** Se declara cumplida y se
-registra que **NO se buscó una novena familia.** Cualquier nueva familia sólo puede entrar
-si sale del pipeline de investigación y pasa el filtro #6 de costes — no de una intuición.
+**Cumplida: 9 de 9 familias con veredicto, cero supervivientes.** Se declara cumplida y se
+registra que **no se buscó ninguna familia por corazonada.** La novena (**H008**, subasta /
+volume profile) NO fue una excepción a esta regla: entró exactamente por la vía que la regla
+exige — salió del pipeline de investigación (MP001, reabierta con datos gratis de cripto), se
+pre-registró con falsador y se testeó. Murió (Sharpe activo -0.067 ≪ 0.961). Cualquier
+familia futura debe entrar por esa misma vía — nunca de una intuición.
 
 ## Cierre
 
-Dos ciclos, dos vehículos (CFD spot y cripto perp), ocho familias, cero edge que supere el
+Dos ciclos, dos vehículos (CFD spot y cripto perp), nueve familias, cero edge que supere el
 suelo. El programa convirtió "¿funciona X?" en números falsables y mató cada idea por la
 razón correcta antes de arriesgar capital. Lo que sigue no es otra familia: es medir la
 degradación backtest-vs-vivo con capital propio (`docs/own_capital_phase.md`), una fase de
