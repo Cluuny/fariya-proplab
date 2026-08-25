@@ -311,3 +311,31 @@ resultado:
     Bloque 4 (estrategia condicional + Δ Sharpe con niveles pareados + benchmark nulo) como change
     SIGUIENTE. La condición (2) NO dispara (ni mal ni bien emparejada); procede evaluar (1) y (3).
     Holdout intacto.
+  muestra_completa:
+    # change h008-full-sample: la muestra 15/28 (75 días-instrumento ≈ 15 episodios) dejaba (1)
+    # y (3) UNDERPOWERED por construcción + sesgo (15/28 caen cerca de vencimientos/TOM).
+    fecha: 2026-08-24
+    bloqueante_disco: >
+      La muestra completa (~19 GB comprimido) NO cabe: 7.3 GB libres en la máquina. DECISIÓN
+      (ficha 1.3): procesar TODOS los días del in-sample INCREMENTALMENTE y DESCARTAR el raw
+      (pico de disco ~1 día), reteniendo sólo resúmenes por-día. El raw NO se conserva; checksum
+      verificado al descargar; receta reproducible. El backtest del Bloque 4 se hará igual: día a
+      día, descargar→simular→descartar (nunca 19 GB a la vez).
+    calidad_muestra_completa: "1094 días-instrumento (547 BTC + 547 ETH, TODOS los días); 0 precios cero/neg, 0 tamaños neg, 0 días faltantes → sin KILL"
+    T_efectiva:
+      metodo: "medido sobre la muestra COMPLETA: balance-regime (klines) × edge-touch (perfil del resumen)"
+      balance_regime_frac: "60% de los días (656/1094; BTC 59%, ETH 61%)"
+      episodios_reales: "642 (balance previo × edge-touch: hoy extiende fuera del VA del día previo) → duty 59%"
+      T_efectiva: "~356-642 (descuento por par BTC/ETH ρ0.8) → MUY por encima del umbral 150"
+      veredicto_poder: "NO underpowered por construcción (a diferencia de la muestra 15/28 ≈15 episodios)."
+      matiz: >
+        El edge-TOUCH sobre un día entero está casi garantizado (el VA del 70% excluye las colas,
+        así que el máx/mín del día suele exceder VAH/VAL) → duty 59% es COTA SUPERIOR. La
+        SELECTIVIDAD real la da el filtro de RECHAZO (el mid re-entra al VA en ≤3 barras), que
+        necesita barras intradía y se mide en el Bloque 4; el duty real será menor (más cerca del
+        20% de la ficha) pero la T sigue ≥ 150 incluso a duty 20% (~219 raw → ~121-219).
+    coincidencia_1dia: >
+      Banda de vol de 1 DÍA (no 20), muestra completa (1094): VAH≈banda_sup 8% (mediana 51 bps),
+      VAL≈banda_inf 5% (53 bps), POC≈VWAP 18% (32 bps), cualquiera 26% [23,28]. La condición (2)
+      NO dispara ni con el emparejamiento y timescale correctos sobre la muestra completa. La
+      redundancia NO queda establecida. results/crypto/h008_redundancy_1day.md.

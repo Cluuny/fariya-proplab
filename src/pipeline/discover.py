@@ -4,7 +4,8 @@ Fuentes con acceso programático, en orden de facilidad:
   - arXiv API (q-fin.PM, q-fin.ST, q-fin.TR) — la única con API limpia (Atom).
   - RSS de Alpha Architect.
   - RSS de CXO Advisory.
-  - SSRN: sin API pública → ingesta MANUAL de URLs por ahora (`manual_candidate`).
+  - SSRN y ResearchGate: sin API pública → ingesta MANUAL de URLs (`manual_candidate`).
+    ResearchGate aloja papers publicados y preprints; pasa por los MISMOS filtros que el resto.
 
 Salida: cola de candidatos SIN procesar en la DB (título, abstract, url, fecha, fuente).
 
@@ -145,6 +146,7 @@ def manual_candidate(url: str, titulo: str, abstract: str = "", fecha: str = "",
         raise ValueError(f"tipo_de_fuente inválido: {tipo_de_fuente!r} (usa {list(TIPOS_DE_FUENTE)})")
     low = (url or "").lower()
     fuente = ("ssrn" if "ssrn" in low else
+              "researchgate" if "researchgate" in low else
               "reddit" if "reddit" in low else
               "twitter" if ("twitter" in low or "x.com" in low) else
               "youtube" if ("youtube" in low or "youtu.be" in low) else
