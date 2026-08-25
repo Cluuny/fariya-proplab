@@ -239,6 +239,11 @@ def test_manual_candidate_ssrn():
     assert c["fuente"] == "ssrn" and c["fuente_de_la_idea"] == "humano"
 
 
+def test_manual_candidate_researchgate():
+    c = discover.manual_candidate("https://www.researchgate.net/publication/123", "A Paper")
+    assert c["fuente"] == "researchgate"
+
+
 # ------------------------------------------------- backfill = conjunto de validación
 def test_backfill_loads_eleven(conn):
     n = backfill.load_backfill(conn)

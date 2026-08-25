@@ -37,3 +37,6 @@ data/papers/*.pdf
 data/papers/*.PDF
 !data/papers/README.md
 !data/papers/MANIFEST.md
+
+# H008 staging temporal (raw descartado)
+/data/_h008_tmp/
