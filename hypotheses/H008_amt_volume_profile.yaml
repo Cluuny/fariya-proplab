@@ -51,13 +51,35 @@ clase_de_dato: flujo                   # volumen traded por nivel de precio
 frecuencia: intraday_bar
 
 # --- OPERABILIDAD / DATOS (fijados AHORA) ---
-instrumentos: [BTCUSDT]                # UN instrumento para empezar; ETHUSDT sólo si el pipeline funciona
-n_instrumentos: 1
+instrumentos: [BTCUSDT, ETHUSDT]       # ETH desde el INICIO: duplica T y evita un veredicto irresoluble
+n_instrumentos: 2
+concesion_correlacion: >
+  ETH y BTC correlacionan ~0.8 → los episodios NO son del todo independientes. N_eff de un par a
+  ρ=0.8 = 2/(1+0.8) = 1.11× (no 2×): la T efectiva es ~81 episodios/año (no 146), ~162 sobre 2
+  años. Para un test de REDUNDANCIA DE NIVELES la concesión es ACEPTABLE (y mejor que un veredicto
+  'underpowered' irresoluble con un solo instrumento). Se documenta explícitamente y la T efectiva
+  se descuenta por correlación en el reporte de poder.
 datos_requeridos:
-  - "aggTrades (volumen traded por nivel de precio → define el perfil)"
-  - "bookTicker (mid para ejecución/entradas; ya ingerido y validado)"
+  - "aggTrades (5-64 MB/día): volumen traded por nivel de precio → define el PERFIL. IMPRESCINDIBLE."
+  - "bookTicker (144-384 MB/día): mid de ejecución. A VERIFICAR si es necesario (ver abajo)."
 datos_ya_disponibles: true             # data.binance.vision, gratis, ya ingerido (Bloque 1 cripto)
 costo_datos_usd_mes: 0
+verificacion_datos:
+  # (3.2) confirmar si bookTicker hace falta o si el mid se deriva de aggTrades con precisión
+  # suficiente para entradas LÍMITE en el borde del VA.
+  pregunta: "¿basta aggTrades (mid ≈ último trade / VWAP corto) para colocar límites en el borde
+    del VA, o hace falta el mejor bid/ask de bookTicker?"
+  decision: >
+    Si aggTrades basta, la descarga es ~10× más ligera (5-64 MB vs 144-384 MB/día). Resolver ESTO
+    con 1 día antes de bajar dos años (ver plan_descarga).
+plan_descarga:
+  # (3.3) MEDIR UN DÍA ANTES DE BAJAR DOS AÑOS. El cuello del proyecto es RAM, no cómputo (sorts
+  # de 30M filas hacen swap, docs/ofi_validation.md).
+  paso_1: "Descargar 1 DÍA (BTCUSDT + ETHUSDT, aggTrades ± bookTicker). Medir GB, tiempo de proceso
+    y pico de RAM."
+  paso_2: "Extrapolar a 730 días × 2 instrumentos ANTES de lanzar la descarga completa. Si el pico
+    de RAM no cabe, procesar por chunks/día y no cargar todo en memoria."
+  regla: "NO se baja la muestra completa sin el paso 1."
 ventana_de_perfil: "rodante de 24 h previas (perfil DIARIO); VAH/VAL = área de valor del 70%
   alrededor del POC; POC = bucket de mayor volumen"
 bucket_de_precio: "$10 (100 ticks de $0.10) — primario; $5 como ÚNICO chequeo de robustez"
@@ -134,13 +156,12 @@ benchmark_nulo:
 poder_estadistico:
   formula: "SE(Ŝ) ≈ √((1 + S²/2)/T), T = nº de EPISODIOS independientes (no barras)"
   episodios_estimados: >
-    ~1 setup por día activo × duty 20% × 365 ≈ 73 episodios/año por instrumento. Para T ≥ 150
-    (SE ≈ 0.087, IC95 ±0.17 con S~0.5) se necesitan ≥ 2 años de BTCUSDT (o añadir ETHUSDT). Con
-    1 año (T ~ 73) → SE ≈ 0.12, IC95 ±0.24: probablemente INSUFICIENTE para separar el falsador
-    del umbral.
-  muestra_a_adquirir: ">= 2 años de BTCUSDT (2022-2024) para T >= 150; si no, el veredicto puede
-    ser 'underpowered'."
-  estado_underpowered_disponible: true
+    ~1 setup por día activo × duty 20% × 365 ≈ 73 episodios/año por instrumento. Con DOS
+    instrumentos (BTC+ETH) el raw es ~146/año, pero ρ≈0.8 los descuenta a T EFECTIVA ~81/año
+    (N_eff par = 1.11×). Sobre 2 años: raw ~292, EFECTIVA ~162 → SE(Ŝ)≈0.083, IC95 ±0.16 (S~0.5).
+    Marginalmente por encima del umbral T=150. Con 1 instrumento/1 año (T~73) sería irresoluble.
+  muestra_a_adquirir: "2 años de BTCUSDT + ETHUSDT (2022-09 → 2024-08) para T efectiva ~162."
+  estado_underpowered_disponible: true   # aplica sobre todo a la dimensión incremental (1b)
 
 # --- EXPECTATIVA COMPROMETIDA (escrita ANTES, con derivación) ---
 resultado_esperado:
@@ -156,19 +177,39 @@ resultado_esperado:
     "El VAH es redundante con niveles simples" = Δ Sharpe (perfil − simple) ≤ 0 con IC que no
     excluye 0, Y coincidencia VAH≈máx-N > 80%. Ése es el resultado que se espera y que, de darse,
     ES el hallazgo (no un fracaso).
-  veredicto_esperado: "muerta por redundancia, o underpowered si T < ~100"
+  veredicto_esperado: "muerta por redundancia (2), o underpowered en la dimensión incremental (1b)"
+  probabilidad_previa: >
+    BAJA — y no por el diseño del test sino por la MAGNITUD DEL LISTÓN. El listón efectivo
+    calculado en esta misma ficha es Sharpe ACTIVO ≈ 1.14 (duty 20%). En contexto de TODO lo
+    medido en el programa: mejor bruto del proyecto 0.495 (H002 carry); industria de trend ~0.32
+    bruto de comisiones; order flow ratio señal/coste 0.039. H008 exige MÁS DEL DOBLE del mejor
+    resultado aparecido en nueve familias, a partir de una regla SIN literatura arbitrada que la
+    respalde. Se corre igual porque el propósito declarado es CERRAR la duda sobre la familia
+    (¿aporta el perfil sobre niveles simples?), y para eso el test —sobre todo la condición (2),
+    que se dispara limpiamente— sirve. Registrar esto AHORA para que el resultado no sorprenda.
 
 # --- FALSADOR (congelado, disparable) ---
 FALSADOR: >
-  H008 se descarta si SE CUMPLE CUALQUIERA:
-   (1) Δ Sharpe (perfil − simple, bootstrap pareado) ≤ 0 O su IC95 cruza 0  → VAH redundante.
-   (2) coincidencia VAH≈máx-N-días > 80% (tolerancia 10 bps)  → infraestructura cara para algo
-       gratis (hallazgo suficiente por sí solo).
-   (3) Sharpe ACTIVO de la estrategia de perfil < p95 del nulo (niveles al azar, misma exposición)
-       → no hay efecto sobre el benchmark que comparte exposición.
-  No se reintenta con variantes salvo UN ÚNICO chequeo de robustez pre-especificado (bucket $5 en
-  vez de $10) y CONTADO (deflated Sharpe con N=2). Si el veredicto in-sample no distingue el
-  falsador del umbral por poder, el estado es 'underpowered' y NO se toca el holdout.
+  H008 se descarta si SE CUMPLE CUALQUIERA de (1), (2), (3). Las tres son INDEPENDIENTES: el
+  veredicto GLOBAL puede ser MUERTA por (2) o (3) aunque (1) salga underpowered.
+   (1)  Δ Sharpe (perfil − simple, bootstrap pareado) ≤ 0 con IC95 que NO cruza 0  → VAH
+        REDUNDANTE, MUERTA.
+   (1b) IC95 del Δ CRUZA 0  → UNDERPOWERED en la dimensión incremental (NO muerta). Se reporta el
+        punto estimado y el IC y se declara explícitamente que la muestra no resuelve esa
+        dimensión. RAZÓN (corrige el defecto de la v1): con T~150 y S~0.5, SE(Ŝ)≈0.087 → el IC del
+        Δ sólo NO cruza 0 si |Δ|≳0.17, una diferencia enorme entre dos ramas que comparten
+        regla/contexto/instrumento/episodios y sólo cambian los niveles; el "IC cruza 0" se
+        dispararía casi por CONSTRUCCIÓN, no por evidencia. Se separa "no hay efecto" (1) de "no
+        se puede resolver" (1b), como se corrigió en H003 (falsador absoluto que el nulo alcanzaba)
+        y en la calibración de H007 (test sin poder para discriminar).
+   (2)  coincidencia VAH≈máx-N-días > 80% (tolerancia 10 bps)  → infraestructura cara para algo
+        gratis. Se dispara LIMPIAMENTE (no depende del poder) y es la condición MÁS informativa de
+        la ficha; hallazgo suficiente por sí solo para MUERTA.
+   (3)  Sharpe ACTIVO de la estrategia de perfil < p95 del nulo (niveles al azar, misma exposición)
+        → no hay efecto sobre el benchmark que comparte exposición. MUERTA.
+  No se reintenta con variantes salvo UN ÚNICO chequeo de robustez pre-especificado (bucket $5) y
+  CONTADO (deflated Sharpe con N=2). Si (2) y (3) pasan pero (1) queda underpowered, el estado
+  GLOBAL es 'underpowered' y NO se toca el holdout.
 
 metrica_exito: >
   Para PROMOVER (a confirmación en holdout) TODAS: Δ Sharpe (perfil − simple) > 0 con IC95 que no
@@ -177,10 +218,13 @@ metrica_exito: >
 
 # --- HOLDOUT ---
 holdout: respetado
+muestra_planeada: "2022-09-01 → 2024-08-31 (2 años, BTCUSDT + ETHUSDT) para T efectiva ~162"
+holdout_corte: "2024-03-01"            # (3.4) fecha de corte REGISTRADA ahora, antes de mirar nada
 holdout_detalle: >
-  Sagrado: últimos 6 meses de la muestra adquirida, reservados; se tocan UNA vez, sólo si H008
-  pasa in-sample (Δ>0, coincidencia<80%, activo>p95 y >requerido). Si muere o sale underpowered
-  in-sample, el holdout NO se toca.
+  Sagrado: últimos 6 meses (2024-03-01 → 2024-08-31). (3.4) SEPARACIÓN FÍSICA en el momento de la
+  DESCARGA, no después: el holdout se baja a un directorio DISTINTO (p. ej. data/raw_crypto_holdout/)
+  y el pipeline in-sample no lo lee. Se toca UNA vez, sólo si H008 pasa in-sample (Δ>0 resoluble,
+  coincidencia<80%, activo>p95 y >requerido). Si muere por (2)/(3) o sale underpowered, NO se toca.
 
 # --- GESTIÓN DE COLA ---
 score_prioridad: null
@@ -199,3 +243,21 @@ enmiendas:
       niveles al azar (semilla fija, p95). Suelo de costes cripto (0.52 bruto a 0.5 rt/día maker)
       y la trampa de duty bajo (Sharpe activo requerido 1.14). Poder: T≥150 exige ≥2 años; estado
       'underpowered' disponible. Falsador congelado y disparable con un único chequeo de robustez.
+  - fecha: 2026-08-24
+    tipo: pre_ejecucion            # sigue intentos_realizados=0, fecha_test=null
+    que: >
+      Tres ajustes antes de descargar datos (change h008-preregistration-v2):
+      (1) FALSADOR corregido: el (1) por "IC cruza 0" se disparaba casi por CONSTRUCCIÓN (con
+      T~150, SE(Ŝ)≈0.087, haría falta |Δ|≳0.17 entre dos ramas que sólo cambian los niveles). Se
+      separa: (1) Δ≤0 con IC que NO cruza 0 → MUERTA redundante; (1b) IC cruza 0 → UNDERPOWERED en
+      la dimensión incremental, NO muerta. (2) [coincidencia>80%] y (3) [activo<p95] se quedan y
+      son independientes: el veredicto global puede ser MUERTA por (2)/(3) aunque (1) quede
+      underpowered. Mismo defecto corregido en H003 y en la calibración de H007.
+      (2) probabilidad_previa registrada en resultado_esperado: BAJA por la MAGNITUD del listón
+      (Sharpe activo ~1.14 = >2× el mejor del proyecto 0.495), sin literatura arbitrada; se corre
+      para CERRAR la duda de la familia, no esperando que pase.
+      (3) DATOS: ETHUSDT añadido desde el inicio (T raw 73→146, efectiva ~81/año tras ρ≈0.8;
+      concesión documentada, aceptable para test de redundancia). Verificar si bookTicker hace
+      falta o basta aggTrades (~10× más ligero). MEDIR 1 día (GB/tiempo/RAM; el cuello es RAM)
+      antes de bajar 2 años. HOLDOUT separado FÍSICAMENTE al descargar (data/raw_crypto_holdout/),
+      corte 2024-03-01 registrado ahora. Muestra planeada 2022-09 → 2024-08.
