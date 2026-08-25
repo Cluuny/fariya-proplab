@@ -228,9 +228,9 @@ holdout_detalle: >
 
 # --- GESTIÓN DE COLA ---
 score_prioridad: null
-estado: pre_registrado
-intentos_realizados: 0
-fecha_test: null
+estado: no_promociona          # Bloque 4: no viable (activo -0.067 ≪ listón 0.961); (1) underpowered
+intentos_realizados: 1
+fecha_test: "2026-08-24"
 
 # --- ENMIENDAS (pre-ejecución; se pueden fortalecer hasta que fecha_test != null) ---
 enmiendas:
@@ -364,3 +364,23 @@ resultado:
     medido: "26% [23,28] con emparejamiento y timescale correctos sobre 1094 días; POC vs VWAP mediana 32 bps"
     veredicto: "REFUTADA. Los niveles de perfil NO son redundantes con niveles simples — el perfil marca precios DISTINTOS."
     matiz: "DISTINTOS ≠ MEJORES. Que sean mejores (aporten Δ Sharpe) lo decide el Bloque 4."
+  bloque4:
+    # change h008-block4: estrategia condicional pareada + Δ Sharpe + benchmark nulo.
+    # NO se tocó falsador ni resultado_esperado. Reporte completo: docs/h008_block4.md.
+    fecha: 2026-08-24
+    veredicto: >
+      NO PROMUEVE. Sharpe activo de la rama perfil -0.067 (341 episodios) ≪ listón 0.961 → NO
+      viable. Las tres condiciones del falsador por separado: (1) Δ Sharpe (perfil−simple) -0.966
+      con IC95 [-2.54,+0.53] que CRUZA 0 → UNDERPOWERED en la dimensión incremental (no muerta por 1);
+      (2) coincidencia 26% → no dispara; (3) Sharpe activo -0.067 > p95 del nulo -2.041 → no dispara
+      (de hecho SUPERA al nulo con p≈0.000).
+    hallazgo: >
+      Los niveles de perfil SÍ llevan información vs fading aleatorio (el nulo pierde ~-3.4 de
+      media; la rama perfil queda en ~0), pero el edge es ~0 tras costes: distintos e informativos,
+      NO rentables. El fade de extensiones en un mercado momentum-driven no genera dinero.
+    pareado: "268/341 compartidos (la rama simple no llena cuando su nivel de banda no se toca); Δ sobre compartidos"
+    sensibilidad_fills: >
+      Supuesto base = fill al TOQUE (infla). Con fill sólo si cruza ≥5 bps: activo -0.986, Δ -1.382
+      → el veredicto NO cambia (sigue no viable). ADVERTENCIA: el modelo de fills nunca se construyó.
+    expectativa: "resultado_esperado (Δ≈0/negativo, veredicto muerta-por-redundancia o underpowered) CUMPLIDA en dirección: no promueve; (1) underpowered."
+    holdout: "INTACTO — no se tocó (no pasó in-sample). No se descarga."
