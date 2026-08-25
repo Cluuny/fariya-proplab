@@ -287,6 +287,27 @@ resultado:
     extremo casi asegura coincidencia baja, sin medir redundancia real. Es una lección sobre el
     diseño del diagnóstico (2), no evidencia fuerte del efecto. La redundancia REAL (VAH/VAL vs
     Bollinger 2σ, ambos interiores; POC vs SMA/VWAP) la decide el Δ Sharpe del Bloque 4.
+  coincidencia_bien_emparejada:
+    # CORRECCIÓN DE DISEÑO DEL TEST (change h008-redundancy-paired): el diagnóstico original
+    # emparejaba VAH (interior) con el máximo (extremo) → coincidencia baja garantizada por
+    # geometría, no por información. Se SUSTITUYE por INTERIOR vs INTERIOR. Umbral 80% y
+    # tolerancia 10 bps IDÉNTICOS (no cambia el criterio, sólo el emparejamiento).
+    fecha: 2026-08-24
+    n: "75 días-instrumento in-sample"
+    vah_vs_bollinger_sup: "4% [0,8], mediana 415 bps"     # Bollinger 20d = banda multi-día, más ancha
+    val_vs_bollinger_inf: "0% [0,0], mediana 666 bps"
+    poc_vs_sma20: "0% [0,0], mediana 283 bps"
+    poc_vs_vwap24h: "28% [18,38], mediana 36 bps"         # el emparejamiento MÁS limpio (mismo timescale y tipo)
+    cualquiera: "32% [21,43]"
+    dispara_2: false                                      # 32% ≪ 80%, IC lejos de 80%
+    lectura: >
+      Ni siquiera bien emparejado dispara la condición (2). El POC NO es un VWAP caro: difieren
+      ~36 bps de mediana (el modo del volumen ≠ la media del volumen; la distribución no es
+      simétrica). Las comparaciones con Bollinger/SMA(20) son multi-día vs perfil de 1 día → otro
+      desajuste de timescale, por eso salen aún más bajas; se ponderan menos que POC-vs-VWAP. La
+      REDUNDANCIA de niveles NO queda establecida → la pregunta incremental sigue ABIERTA y la
+      decide el Δ Sharpe del Bloque 4.
   siguiente: >
-    Bloque 4 (estrategia condicional + Δ Sharpe con niveles pareados CORRECTOS + benchmark nulo)
-    como change SIGUIENTE. Coincidencia (2) no dispara; procede evaluar (1) y (3). Holdout intacto.
+    Bloque 4 (estrategia condicional + Δ Sharpe con niveles pareados + benchmark nulo) como change
+    SIGUIENTE. La condición (2) NO dispara (ni mal ni bien emparejada); procede evaluar (1) y (3).
+    Holdout intacto.
