@@ -29,6 +29,12 @@ CLASES_DE_DATO = (
     "volatilidad_implicita",   # opciones cripto (Deribit/DVOL) — la clase que faltaba desde H004
 )
 FRECUENCIAS = ("EOD", "intraday_bar", "tick", "orderbook")
+# familia_de_riesgo (change e3-recalibration): el objetivo son CUATRO estrategias
+# DESCORRELACIONADAS (0.4·√4=0.8). Se registra la familia de riesgo de cada candidato para no
+# acabar con cuatro versiones de trend; la diversificación se MIDE (learning_report).
+FAMILIAS_DE_RIESGO = (
+    "trend", "carry", "reversion", "estacionalidad", "flujo", "volatilidad", "macro", "otra",
+)
 FUENTES_DE_LA_IDEA = ("pipeline", "humano", "reviewer")
 TIPOS_DE_FUENTE = (
     "paper_arbitrado", "preprint", "blog", "reddit", "twitter", "discord", "youtube",
@@ -71,6 +77,7 @@ CREATE TABLE IF NOT EXISTS hipotesis (
     estructura               TEXT,
     direccionalidad          TEXT,
     clase_de_dato            TEXT,          -- precio|macro|flujo|fundamental|estructura_temporal|calendario
+    familia_de_riesgo        TEXT,          -- trend|carry|reversion|estacionalidad|flujo|volatilidad|macro|otra
     -- frecuencia / requisitos de datos (intradía y microestructura)
     frecuencia               TEXT,          -- EOD | intraday_bar | tick | orderbook
     requiere_volumen_consolidado INTEGER,   -- 0/1 (FX spot NO lo tiene; futuros SÍ)

@@ -80,6 +80,21 @@ def _densidad_estrategia_por_fuente(conn) -> list[dict]:
     return [dict(r) for r in conn.execute(sql, _PRE_O_EN_EJE_ESTRATEGIA).fetchall()]
 
 
+def _por_familia_riesgo(conn) -> list[dict]:
+    """Supervivientes por familia_de_riesgo. Si los CUATRO que hacen falta salen de la misma
+    familia, no hay diversificación y el 0.4·√4=0.8 NO se alcanza (change e3-recalibration)."""
+    sql = """
+        SELECT COALESCE(familia_de_riesgo, 'sin_clasificar') AS familia,
+               COUNT(*) AS n,
+               SUM(CASE WHEN estado IN ('viable','en_cola','pre_registrado') THEN 1 ELSE 0 END) AS vivas
+        FROM hipotesis
+        WHERE estado != 'candidato'
+        GROUP BY COALESCE(familia_de_riesgo, 'sin_clasificar')
+        ORDER BY vivas DESC, n DESC
+    """
+    return [dict(r) for r in conn.execute(sql).fetchall()]
+
+
 def _calibracion(conn) -> list[dict]:
     """Filas realmente CORRIDAS a un veredicto de Sharpe con esperado y medido."""
     sql = """
@@ -167,6 +182,21 @@ def report(conn) -> str:
         lines.append("**Densidad = pasan es_estrategia_operable / descubiertos.** Es el número que "
                      "dice DÓNDE BUSCAR: una fuente de estrategias destiladas (Quantpedia) debería "
                      "densificar más que un repositorio de metodología (arXiv). Se mide, no se asume.")
+        lines.append("")
+
+    # supervivientes por FAMILIA DE RIESGO (¿hay diversificación para el 0.4·√4=0.8?)
+    fam = _por_familia_riesgo(conn)
+    if fam:
+        lines.append("## Supervivientes por familia de riesgo")
+        lines.append("")
+        lines.append("| familia_de_riesgo | procesados | vivas |")
+        lines.append("|---|---|---|")
+        for r in fam:
+            lines.append(f"| {r['familia']} | {r['n']} | {r['vivas']} |")
+        lines.append("")
+        lines.append("**El objetivo son CUATRO estrategias DESCORRELACIONADAS (0.4·√4 = 0.8).** Si los "
+                     "cuatro supervivientes salieran de la MISMA familia, no habría diversificación y el "
+                     "0.8 no se alcanza. La diversificación se MIDE aquí, no se asume.")
         lines.append("")
 
     # causa de muerte

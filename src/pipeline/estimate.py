@@ -177,6 +177,79 @@ def _pct_after(text: str, m) -> bool:
     return end < len(text) and text[end:end + 1] == "%"
 
 
+# --- familia_de_riesgo: para no acabar con cuatro versiones de trend (change e3-recalibration) ---
+_FAMILIA_RULES = (
+    ("trend",          ("momentum", "trend following", "trend-following", "time-series momentum",
+                        "time series momentum", "moving average", "breakout")),
+    # OJO: "carry" a secas es un VERBO común («pairs carry reversal») → falso positivo. Se exige
+    # la familia carry por frases específicas (hallado en el retro-test, change e3-recalibration).
+    ("carry",          ("carry trade", "carry strategy", "currency carry", "carry factor",
+                        "carry return", "roll yield", "roll-yield", "term premium",
+                        "interest rate differential")),
+    ("reversion",      ("mean reversion", "mean-reversion", "reversal", "contrarian", "overreaction")),
+    ("estacionalidad", ("seasonal", "turn-of-the-month", "turn of the month", "day-of-the-week",
+                        "calendar", "holiday", "january effect", "intramonth")),
+    ("volatilidad",    ("volatility risk premium", "variance risk premium", "implied volatility",
+                        "vix", "straddle", "vol premium", "short vol")),
+    ("flujo",          ("order flow", "order-flow", "order imbalance", "volume profile", "vpin",
+                        "positioning", "commitment of traders", "microstructure", "footprint")),
+    ("macro",          ("macroeconomic", "intermarket", "lead-lag", "monetary policy", "central bank",
+                        "yield curve", "inflation")),
+)
+
+
+def estimate_familia_de_riesgo(candidate: dict) -> str:
+    """Familia de RIESGO por palabras clave (para medir la diversificación de los supervivientes)."""
+    text = _text(candidate)
+    for fam, needles in _FAMILIA_RULES:
+        if _hits_word(text, needles):
+            return fam
+    return "otra"
+
+
+# regex de métricas ALTERNATIVAS para estimar el bruto cuando no hay "Sharpe" (mitiga el problema
+# de que arXiv no reporta Sharpe → todo cae en requiere_lectura). Todas anualizadas.
+_RET_RE = re.compile(r"(\d+(?:\.\d+)?)\s*%\s*(?:annual(?:ized|ised)?|per\s+year|/\s*year|p\.?a\.?)\s*"
+                     r"(?:average\s+)?returns?", re.IGNORECASE)
+_VOL_RE = re.compile(r"(?:volatility|standard deviation|annualized vol(?:atility)?)\s*(?:of\s*)?"
+                     r"(\d+(?:\.\d+)?)\s*%", re.IGNORECASE)
+_IR_RE = re.compile(r"information ratio\s*(?:of|=|:)?\s*(\d+(?:\.\d+)?)", re.IGNORECASE)
+_TSTAT_RE = re.compile(r"t-?stat(?:istic)?\s*(?:of|=|:)?\s*(\d+(?:\.\d+)?)", re.IGNORECASE)
+_YEARS_RE = re.compile(r"(\d{2,3})\s*years", re.IGNORECASE)
+
+
+def extract_bruto_estimado(candidate: dict) -> tuple[float | None, str | None]:
+    """Estima el bruto anualizado del abstract. Prueba, en orden de fiabilidad:
+      (1) "Sharpe ... X"  (directo);           (2) information ratio ≈ Sharpe;
+      (3) retorno anual % / vol anual % ;        (4) t-stat / √años.
+    Devuelve (bruto, cita con el MÉTODO). Ausente → (None, None). Conservador y auditable."""
+    b, c = extract_bruto_reportado(candidate)
+    if b is not None:
+        return b, c
+    abstract = candidate.get("abstract") or ""
+    # (2) information ratio ≈ Sharpe
+    m = _IR_RE.search(abstract)
+    if m and _SHARPE_MIN <= float(m.group(1)) <= _SHARPE_MAX:
+        return float(m.group(1)), f'abstract: information ratio ≈ Sharpe ("{m.group(0).strip()}")'
+    # (3) retorno anual / vol anual
+    mr, mv = _RET_RE.search(abstract), _VOL_RE.search(abstract)
+    if mr and mv:
+        ret, vol = float(mr.group(1)), float(mv.group(1))
+        if vol > 0:
+            sr = ret / vol
+            if _SHARPE_MIN <= sr <= _SHARPE_MAX:
+                return round(sr, 2), f'abstract: ret {ret}% / vol {vol}% → Sharpe {sr:.2f}'
+    # (4) t-stat / √años
+    mt, my = _TSTAT_RE.search(abstract), _YEARS_RE.search(abstract)
+    if mt and my:
+        t, yrs = float(mt.group(1)), float(my.group(1))
+        if yrs > 0:
+            sr = t / (yrs ** 0.5)
+            if _SHARPE_MIN <= sr <= _SHARPE_MAX:
+                return round(sr, 2), f'abstract: t-stat {t} / √{yrs:.0f}años → Sharpe {sr:.2f}'
+    return None, None
+
+
 def estimate_fields(candidate: dict) -> dict:
     """Todos los campos deterministas que E3 necesita, desde título + abstract.
 
@@ -184,10 +257,13 @@ def estimate_fields(candidate: dict) -> dict:
     """
     text = _text(candidate)
     frec = estimate_frecuencia(text)
-    bruto, cita = extract_bruto_reportado(candidate)
+    # bruto: primero "Sharpe" directo, luego métricas alternativas (IR, ret/vol, t-stat/√años)
+    # para que E3 decida más veces en vez de caer siempre en requiere_lectura.
+    bruto, cita = extract_bruto_estimado(candidate)
     out = {
         "frecuencia": frec,
         "clase_de_dato": estimate_clase(text),
+        "familia_de_riesgo": estimate_familia_de_riesgo(candidate),
         "duty_cycle_estimado": estimate_duty(text) if frec == "EOD" else None,
         "turnover_estimado": estimate_turnover(text, frec),
         "bruto_reportado": bruto,
