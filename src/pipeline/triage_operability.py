@@ -31,10 +31,14 @@ from dataclasses import dataclass
 DATA_BUDGET_USD = 125.0
 
 # --- FALSABILIDAD: rechazadas por no medir un dato externo (ICT/SMC) ---
+# Se casan con LÍMITE DE PALABRA (\b…\b): los acrónimos cortos ("ict", "smc", "fvg") como
+# SUBCADENA daban falsos positivos — "ict " casaba dentro de "predict ", "explicit ",
+# "restrict " (bug hallado en la primera corrida live, pipeline-first-live-run: dos papers
+# de vol-risk-premium y rebalanceo rechazados por error). Ver triage con `_hits_word`.
 _NON_FALSIFIABLE = (
     "order block", "orderblock", "fair value gap", "fvg", "smart money concept",
     "smart money", "liquidity grab", "liquidity sweep", "liquidity pool",
-    "inner circle trader", "ict ", "smc ", "judas swing", "optimal trade entry",
+    "inner circle trader", "ict", "smc", "judas swing", "optimal trade entry",
     "breaker block", "mitigation block", "institutional liquidity",
 )
 # --- señales de cross-sectional de acciones (universo enorme, no operable en prop) ---
@@ -86,13 +90,24 @@ def _hits(text: str, needles) -> str | None:
     return None
 
 
+def _hits_word(text: str, needles) -> str | None:
+    """Como `_hits` pero con LÍMITE DE PALABRA: evita que un acrónimo corto ('ict', 'smc',
+    'fvg') case como subcadena dentro de otra palabra ('predict', 'explicit'). Multi-palabra
+    ('order block') también casa correctamente con \\b."""
+    for n in needles:
+        if re.search(r"\b" + re.escape(n) + r"\b", text):
+            return n
+    return None
+
+
 def triage_operability(candidate: dict, *, budget_usd: float = DATA_BUDGET_USD) -> OperabilityVerdict:
     """keep/reject + razón + categoría, a partir de título + abstract + campos declarados."""
     text = f"{candidate.get('titulo', '')} {candidate.get('abstract', '')}".lower()
     text = re.sub(r"\s+", " ", text)
 
-    # 1. FALSABILIDAD primero (distinción de categoría, no de estilo).
-    hit = _hits(text, _NON_FALSIFIABLE)
+    # 1. FALSABILIDAD primero (distinción de categoría, no de estilo). Límite de palabra:
+    # los acrónimos ICT/SMC/FVG no deben casar dentro de "predict"/"explicit"/etc.
+    hit = _hits_word(text, _NON_FALSIFIABLE)
     if hit:
         return OperabilityVerdict("reject",
             f"no falsable: '{hit}' se define sobre el gráfico, sin dato externo que lo "

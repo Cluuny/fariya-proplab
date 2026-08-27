@@ -113,3 +113,19 @@ que se detecte. De ahí la lectura humana íntegra de los primeros 40.
   `literatura_previa_posterior` (¿qué dice la literatura previa/posterior?). Con ellos
   explícitos, AQR ya marca `autores_independientes` (y `sesgo_supervivencia` por la calidad de
   datos del siglo) — pero eso es porque AÑADIMOS el eje, no porque el adversario lo descubriera.
+
+## Corrida 001 (papers ciegos) — el test ciego real del adversario
+
+`docs/pipeline_run_001.md` (2026-08-26) es el test ciego que no se pudo montar aparte: la
+primera corrida sobre papers que nadie había visto. Resultado sobre el ALCANCE del adversario:
+
+- **Coincidencia en estrategias reales:** el único candidato operable (crypto mean reversion 15
+  min, arxiv:2608.21888) — la lectura CONFIRMA al adversario (`costes_plausibles` falla y el
+  paper lo reconoce; 1.3 bp < 5 bp). El operador no encontró un problema oculto por el adversario.
+- **Hueco medido, NO enumerado:** el modo de muerte DOMINANTE (10 de 11 supervivientes de E2) fue
+  «no es una estrategia operable» (método / teoría / RL caja-negra / modelo generativo / monitor
+  de riesgo). **Ningún eje del adversario pregunta eso** — lo atrapó la regla de FALSADOR de E4,
+  no la estación 5. Los 9 ejes presuponen que el candidato ya es una estrategia.
+- **Propuesta registrada (no implementada aún):** décimo eje `es_estrategia_operable` — «¿el
+  paper propone una REGLA direccional con entrada/salida, o es un método/test/optimización/modelo
+  generativo/monitor?». Es el eje que la corrida ciega demostró que falta, con 10 casos concretos.

@@ -285,3 +285,21 @@ Las 8 con veredicto (H001/H002/H003/H005/H006/H007/COT/OFI, todas fuente=reviewe
 ICT/SMC (rechazada_por_falsabilidad). Reproduce los veredictos conocidos: cero supervivientes,
 **5/8 precio** entre las familias, **8/8 reviewer**, causa de muerte dominada por coste (5).
 Si el pipeline no los reprodujera, estaría mal construido.
+
+## Corrida 001 — no automatizable en modo sesión (registro)
+
+Primera corrida real (`docs/pipeline_run_001.md`, 2026-08-26). E1-E3 deterministas en batch
+(`scripts/pipeline_run_001.py`); E4-E5 corridas EN SESIÓN por Claude Code, sin API. **Consecuencia
+aceptada y registrada: en este modo el pipeline NO es automatizable** — cada corrida requiere
+sesión interactiva, sin cron ni lotes desatendidos. Viable para 40, tedioso para 200 vía lectura
+íntegra de PDF (~5-10/sesión). La API (`make_api_extractor`) se cablea SÓLO si una corrida produce
+candidatos útiles; la 001 produjo 0 operables sobre costes (1 pre-refutado) → **API no cableada**.
+
+Defectos deterministas que la corrida ciega halló y corrigió (los tres con test):
+`http`→`https` en arXiv; barrido de microestructura mal formado (HTTP 400) y sin AND-scope (traía
+física); falso positivo de falsabilidad por el acrónimo `ict` casando dentro de `predict`/`explicit`
+(ahora `\b` con `_hits_word`). Estación 2.5 NUEVA (`src/pipeline/estimate.py`): estimación
+determinista desde el abstract (frecuencia, duty, clase, y extracción del Sharpe por regex si está
+en el abstract, con cita `"abstract"`; ausente → null → `requiere_lectura`) — sin esto E3 no podía
+correr sobre arXiv. Hallazgo de embudo: sobre arXiv muerde E2 (operabilidad), no E3 (el abstract
+no reporta Sharpe); el coste decide al LEER, no en el cribado.
