@@ -84,8 +84,15 @@ BREAKEVEN_FULL_DUTY = 0.24
 #   Trend industria (SG CTA)        —      → 0.32 bruto de comisiones
 # Media defendible de las tres razones con número ≈ 0.35.
 #
-# PROVISIONAL: 3-4 puntos de calibración. Se refina con cada candidato testeado
-# (learning_report registra reportado vs medido). Con más puntos el factor migra.
+# BASE AMPLIADA (change pre-run-003-calibration, docs/pre_run_003_calibration.md): la literatura
+# arbitrada mide lo mismo a escala — McLean & Pontiff 2016 (97 predictores): ratio 0.74 in-sample-
+# bias / 0.42 post-publicación; Chen & Zimmermann ~0.5. Mediana de equity ~0.42-0.5; nuestra media
+# propia 0.35 (más pertinente: mismo motor/costes, familias operables, no equity). 0.35 queda en el
+# extremo CONSERVADOR del rango [0, 0.74] — el lado seguro para un filtro. Quantpedia NO da pares
+# reportado-vs-realizado en su tier gratuito (sólo el paperSharpe agregado; + sesgo de selección al
+# alza). INMATERIAL para los 91 ya procesados: el Sectoral (0.55) muere en E3 para cualquier factor
+# ≤ 0.76; el valor sólo importa para futuros candidatos en la banda ~0.57-1.20.
+# PROVISIONAL: se refina con cada candidato testeado (learning_report registra reportado vs medido).
 FACTOR_DEGRADACION = 0.35
 
 
