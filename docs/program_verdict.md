@@ -11,9 +11,9 @@ terreno accesible con la AMPLITUD para generar un edge que despeje el listón** 
 un fracaso: es lo que produce un programa con falsadores honestos, suelo de costes medido, cribado
 de amplitud, y veredictos sin adornos cuando el terreno no da un edge que supere el suelo.
 
-## Las CUATRO confirmaciones independientes del cierre
+## Las CINCO confirmaciones independientes del cierre
 
-El cierre no descansa en un solo número: cuatro medidas independientes, desde cuatro ejes
+El cierre no descansa en un solo número: cinco medidas independientes, desde cinco ejes
 distintos, dan el mismo veredicto — **lo requerido está por encima de lo alcanzable (0.32-0.37)**:
 
 | eje | sección | requerido | alcanzable | veredicto |
@@ -22,8 +22,10 @@ distintos, dan el mismo veredicto — **lo requerido está por encima de lo alca
 | **Amplitud del terreno** | §1.7 | **N_eff ≥ 14** (para 0.50 a IC 0.05) | N_eff **8.15** (futuros, el más ancho) | no despeja |
 | **Economía del payout** | §1.8 | bruto **0.50-0.80** (P(éxito) 50-80%) | 0.32-0.37 (≤ moneda al aire) | no despeja |
 | **Volatilidad objetivo** | §1.9 | — (óptimo **8%**; EV ~$3.3k/año a 0.37) | subir vol INVIERTE el EV a negativo | no rescata |
+| **Convergencia del pipeline** | §1.10 | ~4 supervivientes en familias distintas | **0 de 91**; tasa ~0 (cota 95% 3.3%) | no converge |
 
-Cuatro caras de **UNA** restricción estructural (§1.10): la amplitud efectiva del terreno accesible.
+Cinco caras de **UNA** restricción estructural (§1.12): la amplitud efectiva del terreno accesible.
+Y un hallazgo POSITIVO que, aun a favor, no la salva (§1.11): las estrategias SÍ se diversifican.
 
 ## Las nueve familias, con veredicto y números (1.1)
 
@@ -203,7 +205,7 @@ completo de fondeo (`docs/funded_sharpe_requirement.md`). **El Sharpe BRUTO mín
 ganar y sobrevivir es ~0.5** (P(éxito)≥50%, moneda al aire) **a ~0.8** (70-80%, ingreso fiable),
 donde P(éxito) = P(pasar ambas fases) × P(sobrevivir 12 ciclos). Lo desplegable —trend 0.37,
 industria CTA 0.32— queda EN o por DEBAJO de la moneda al aire; el mejor que el programa midió,
-H002 0.495, roza el 50% pero NO es desplegable (concentración, §1.10). **El negocio de fondeo
+H002 0.495, roza el 50% pero NO es desplegable (concentración, §1.12). **El negocio de fondeo
 exige justo el Sharpe que el terreno no da** — la misma pared, vista desde el payout en vez del
 suelo de costes. (Todos los caveats del modelo —supervivencia optimista, retornos normales—
 empujan el requerido hacia ARRIBA.)
@@ -225,7 +227,49 @@ acumulativa, lo refutó — la barrera muerde ya a 8% (~0.15-0.22). Es un ejempl
 CORRIGE SUS PROPIAS CONCLUSIONES: una lectura provisional se marcó, se testeó y se retractó con el
 número, igual que el nulo defectuoso de H008 o la coincidencia mal emparejada.
 
-## La relectura — una restricción, nueve veces (1.10)
+## El pipeline de búsqueda no puede converger (1.10)
+
+La quinta confirmación no es sobre una estrategia sino sobre la BÚSQUEDA misma. El pipeline de
+investigación procesó **91 candidatos ciegos** (`docs/pipeline_run_001.md`, `_002.md`) con
+**0 supervivientes** a una estrategia viable. Con 0 éxitos en 91, el estimador puntual de la tasa
+de éxito es **0**; la cota superior al 95% (regla de tres) es ~3/91 ≈ **3.3%**. Aun en ese caso
+optimista, harían falta **~120 candidatos para UN superviviente esperado**, y **~4× eso más la
+restricción de que caigan en cuatro FAMILIAS DISTINTAS** — del orden de varios cientos. Con el
+estimador puntual (0), **NINGÚN N finito da supervivientes esperados.**
+
+**La condición de parada de 200 estaba infradimensionada** para el objetivo de cuatro
+supervivientes en familias distintas — pero es moot: no es que falten candidatos, es que la tasa de
+supervivencia es ~0 porque falta amplitud DENTRO de cada familia (§1.7). El pipeline funciona y está
+limpio (cinco defectos hallados y corregidos, un adversario de once ejes, un cribado de costes que
+muerde); lo que no converge es la búsqueda, porque el terreno no contiene el objeto que busca.
+**El programa se cierra por TASA, no por agotamiento de la cuota.**
+
+## El hallazgo estructural POSITIVO — las estrategias sí se diversifican (1.11)
+
+Un resultado MEDIDO que va A FAVOR del plan, y que aun así no lo salva — por eso merece registrarse
+con precisión (`docs/pre_run_003_calibration.md`, `scripts/family_breadth.py`). Se midieron las
+series de retorno diario neto de tres familias (trend, carry, estacionalidad) con el motor real
+sobre 2011-2026:
+
+| | trend | carry | estacionalidad |
+|---|---|---|---|
+| trend | 1.00 | 0.08 | 0.05 |
+| carry | 0.08 | 1.00 | 0.13 |
+| estacionalidad | 0.05 | 0.13 | 1.00 |
+
+Correlación media **0.09** → **N_eff de ESTRATEGIAS = 2.95** (de 3; el ideal), extrapolado a 4
+familias **3.91**. **A diferencia de los INSTRUMENTOS** —que correlacionan 0.7-0.8 y colapsan el
+N_eff a 2-8 (§1.7)— **las ESTRATEGIAS son casi ORTOGONALES.** Combinar familias multiplica el BR
+como predice la teoría (0.4·√4 ≈ 0.8; con el N_eff medido, el Sharpe individual necesario es
+0.40-0.47, apenas por encima del 0.40 asumido). **El temido ρ=0.6 entre trend y carry no se
+materializó: es 0.08.**
+
+**EL CUELLO NUNCA FUE COMBINAR. FUE PRODUCIR LA PRIMERA.** El plan de cuatro estrategias
+descorrelacionadas es estructuralmente correcto —la diversificación por familia es real y medida—
+pero se apoya en tener CUATRO familias cada una a 0.40 neto, y el terreno no produce ni UNA
+(§1.7-1.10). Un motor de multiplicación de BR perfecto, sin nada que multiplicar.
+
+## La relectura — una restricción, nueve veces (1.12)
 
 Con el cierre por amplitud (§1.7) en la mano, las nueve muertes se leen distinto de como se
 leyeron en su momento. **Al menos 5 de las 9 no murieron por lo que creímos entonces (coste,
@@ -256,7 +300,7 @@ programa no necesitaba una décima familia; necesitaba amplitud que el terreno n
 Dos ciclos, dos vehículos (CFD spot y cripto perp), nueve familias, cero edge que supere el
 suelo — y, medido de raíz, **ningún terreno accesible con la amplitud para generarlo** (§1.7),
 confirmado desde CUATRO ejes independientes (coste §1.2, amplitud §1.7, payout §1.8, vol §1.9),
-que en la relectura (§1.10) resulta ser la MISMA restricción tras al menos 5 de las 9 muertes. El
+que en la relectura (§1.12) resulta ser la MISMA restricción tras al menos 5 de las 9 muertes. El
 programa convirtió "¿funciona X?" en números falsables y mató cada idea por la razón correcta antes
 de arriesgar capital, y finalmente midió que el límite no era una idea más sino la AMPLITUD del
 terreno al que se tiene acceso. Lo que sigue no es otra familia ni otra corrida: es medir la

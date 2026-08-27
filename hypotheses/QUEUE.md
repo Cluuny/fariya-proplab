@@ -1,13 +1,15 @@
 # Cola de hipótesis — PropLab · **PROGRAMA CERRADO**
 
-> **CIERRE FORMAL (2026-08-26, change program-close).** Nueve familias con veredicto, CERO
-> supervivientes; confirmado desde CUATRO ejes independientes (suelo de costes, amplitud del
-> terreno, economía del payout, volatilidad objetivo), todos con el mismo veredicto: lo requerido
-> (0.50-0.80 bruto / N_eff ≥ 14) está por encima de lo alcanzable (0.32-0.37 / N_eff 8.15). La cola
-> está VACÍA de candidatos viables. El veredicto completo, las cuatro confirmaciones y la relectura
-> por amplitud están en `docs/program_verdict.md`. **El programa se reabre únicamente si se cumple
-> una de las tres condiciones objetivas de `docs/reopening_conditions.md` (ninguna se cumple hoy),
-> citando cuál y con el número.**
+> **CIERRE FORMAL (2026-08-27, change program-close-final).** Nueve familias con veredicto, CERO
+> supervivientes; confirmado desde CINCO ejes independientes (suelo de costes, amplitud del terreno,
+> economía del payout, volatilidad objetivo, y **convergencia del pipeline**), todos con el mismo
+> veredicto: lo requerido está por encima de lo alcanzable (0.32-0.37 / N_eff 8.15). **El pipeline
+> procesó 91 candidatos con 0 supervivientes → el programa se cierra por TASA (~0), no por agotar la
+> cuota. Contador 91/200.** La cola está VACÍA de candidatos viables. Hallazgo positivo registrado:
+> las ESTRATEGIAS sí se diversifican (ρ 0.09, N_eff 2.95) — combinar familias funciona; producir la
+> primera, no. Veredicto completo en `docs/program_verdict.md`. **Reapertura sólo si se cumple una
+> de las tres condiciones de `docs/reopening_conditions.md` (ninguna hoy: N_eff 8.15<14; IC 0.077<0.10;
+> objetivo 0.20 no despeja), citando cuál con el número.**
 
 Estado de las hipótesis del pipeline de investigación (Flujo 2). Las fichas
 `pre_registradas` o activas viven en `hypotheses/`; las cerradas se mueven a
