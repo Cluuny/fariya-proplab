@@ -268,9 +268,12 @@ def is_operable_strategy(candidate: dict) -> tuple[bool, str]:
     (suelo de costes intradía); (2) exige una señal de posición direccional (verbo o familia), con
     límite de palabra. Devuelve (es_estrategia, razón)."""
     text = _text(candidate)
-    for n in _NOT_STRATEGY:
-        if n in text:
-            return False, f"no es estrategia operable: '{n}' (método/teoría/modelo/monitor/tooling)"
+    # REGLA (change pipeline-run-003-and-breadth): TODOS los gates de decisión por palabra clave
+    # usan LÍMITE DE PALABRA (\b), sin excepción — tres bugs del mismo tipo (ict⊂predict,
+    # carry⊂carrying, long-the⊂along-the) bastan. Ver tests/test_pipeline_word_boundary.py.
+    nn = _hits_word(text, _NOT_STRATEGY)
+    if nn:
+        return False, f"no es estrategia operable: '{nn}' (método/teoría/modelo/monitor/tooling)"
     h = _hits_word(text, _INOPERABLE_HORIZON)
     if h:
         return False, f"horizonte de posición inoperable: '{h}' (< 1 min, sub-coste intradía)"

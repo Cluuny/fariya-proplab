@@ -147,10 +147,44 @@ de cripto hay señal contemporánea/de corto plazo real, pero el coste la supera
 que confirme nuestro código; es una réplica externa de nuestra CONCLUSIÓN de que el cuello es el
 coste/vehículo, no la ausencia de señal. Primera de su tipo en el programa.
 
+## El cierre por AMPLITUD del terreno (1.7)
+
+Después de nueve familias muertas, muchas por amplitud, se hizo la pregunta que decide de una vez:
+**¿cuál es el N_eff MÁXIMO alcanzable con universos que podemos operar Y pagar ($125/mes), y su
+techo de IR supera el listón?** (`docs/terrain_breadth.md`, `scripts/terrain_breadth.py`; N_eff =
+(Σλ)²/Σλ² de la matriz de correlación de retornos diarios).
+
+**Respuesta MEDIDA: NO para todos.**
+
+| universo | N_eff | $/mes | IR techo (IC .05) | vs listón 0.64 |
+|---|---|---|---|---|
+| Cripto perps 30 (Binance, GRATIS, acceso ilimitado) | **2.16** | 0 | 0.073 | NO (9×) |
+| CFD Dukascopy 17 | 5.02 | ~0 | 0.112 | NO (6×) |
+| ETFs sector/país/factor 25 | 3.31 | 0 | 0.091 | NO |
+| **Futuros CME ~26 (el más ancho, proxy)** | **8.15** | ~50 | **0.143** | **NO (4.5×)** |
+| combinaciones (cripto+CFD, futuros+cripto) | 4.36 / 5.83 | — | ≤0.12 | NO |
+
+El universo con acceso ilimitado y gratis (cripto) es el PEOR: **N_eff 2.16, correlación mediana
+0.68 — todo co-mueve con BTC, la cola de altcoins no añade dimensiones.** El más ancho accesible
+(futuros, $50/mes) topa en un techo de IR de 0.14. Robusto a la frecuencia: incluso a rebalanceo
+mensual con IC fuerte (0.05), el mejor llega a 0.49 < 0.64 (superar 0.64 exigiría N_eff ≥ 14, que
+ningún universo accesible alcanza). **Las dos paredes se cierran juntas: a baja frecuencia falta
+amplitud; a alta frecuencia sobra coste.**
+
+Esto es MÁS FUNDAMENTAL que el suelo de costes: aunque la señal fuera perfecta (IC 0.05) y los
+datos gratis, **la amplitud efectiva del terreno accesible es demasiado pequeña para un IR que
+despeje el objetivo de 0.40 neto.** El cuello no es la señal ni el coste por separado — es que el
+terreno no tiene suficientes apuestas independientes. **Por eso la run 003 del pipeline NO se
+ejecutó: decirlo con el número es más informativo que cuatro corridas más.** (Caveat honesto: el
+cierre es relativo al objetivo de 0.40 neto y a los IC bajos que el programa demostró; con la mitad
+de ambición o un IC elite el cálculo cambiaría, pero ninguno está sobre la mesa.)
+
 ## Cierre
 
 Dos ciclos, dos vehículos (CFD spot y cripto perp), nueve familias, cero edge que supere el
-suelo. El programa convirtió "¿funciona X?" en números falsables y mató cada idea por la
-razón correcta antes de arriesgar capital. Lo que sigue no es otra familia: es medir la
+suelo — y, medido de raíz, **ningún terreno accesible con la amplitud para generarlo** (§1.7). El
+programa convirtió "¿funciona X?" en números falsables y mató cada idea por la razón correcta antes
+de arriesgar capital, y finalmente midió que el límite no era una idea más sino la AMPLITUD del
+terreno al que se tiene acceso. Lo que sigue no es otra familia ni otra corrida: es medir la
 degradación backtest-vs-vivo con capital propio (`docs/own_capital_phase.md`), una fase de
 INSTRUMENTACIÓN, no de ingreso.
