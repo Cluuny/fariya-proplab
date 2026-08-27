@@ -303,3 +303,13 @@ determinista desde el abstract (frecuencia, duty, clase, y extracción del Sharp
 en el abstract, con cita `"abstract"`; ausente → null → `requiere_lectura`) — sin esto E3 no podía
 correr sobre arXiv. Hallazgo de embudo: sobre arXiv muerde E2 (operabilidad), no E3 (el abstract
 no reporta Sharpe); el coste decide al LEER, no en el cribado.
+
+## Regla: límite de palabra en los gates de decisión (\b)
+
+Tres bugs del mismo tipo bastaron para hacerla regla explícita (change pipeline-run-003-and-breadth):
+`ict`⊂`predict` (falsabilidad, run 001), `carry`⊂`carrying` y `long the`⊂`along the`
+(es_estrategia_operable, run 002). **TODO gate de DECISIÓN por palabra clave usa límite de palabra
+(`\b`), sin excepción** (`estimate._hits_word`, `triage_operability._hits_word`). Test genérico que
+lo verifica con una batería de palabras-trampa: `tests/test_pipeline_word_boundary.py`. (Las listas
+PERMISIVAS de clasificación con prefijos intencionados —«rebalanc», «equity anomal»— se escriben en
+forma explícita, no por subcadena arbitraria.)
