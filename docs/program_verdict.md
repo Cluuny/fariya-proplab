@@ -1,12 +1,15 @@
-# Veredicto del programa — dos ciclos cerrados (CFD y cripto)
+# Veredicto del programa — CIERRE FORMAL (CFD y cripto)
 
-Este es el documento de referencia del programa. Cubre AMBOS ciclos —el universo CFD y el
-pivote a cripto/order flow— con los números completos y sin adornos. Se consultará dentro
-de un año: debe bastar por sí solo.
+**Versión FINAL y autosuficiente (2026-08-26, change program-close).** Este es el documento de
+referencia del programa CERRADO. Cubre AMBOS ciclos —el universo CFD y el pivote a cripto/order
+flow— con los números completos y sin adornos. Se consultará dentro de un año: **debe bastar por
+sí solo.** El programa se REABRE únicamente si se cumple una de las tres condiciones OBJETIVAS de
+`docs/reopening_conditions.md`, citando cuál y con el número — nunca por corazonada.
 
-Dos ciclos, nueve familias con veredicto, **cero supervivientes**. No es un fracaso: es lo
-que produce un programa con falsadores honestos, suelo de costes medido y veredictos sin
-adornos cuando el vehículo y los datos no dan un edge que supere el suelo.
+Dos ciclos, nueve familias con veredicto, **cero supervivientes**, y —medido de raíz— **ningún
+terreno accesible con la AMPLITUD para generar un edge que despeje el listón** (§1.7-1.8). No es
+un fracaso: es lo que produce un programa con falsadores honestos, suelo de costes medido, cribado
+de amplitud, y veredictos sin adornos cuando el terreno no da un edge que supere el suelo.
 
 ## Las nueve familias, con veredicto y números (1.1)
 
@@ -179,10 +182,37 @@ ejecutó: decirlo con el número es más informativo que cuatro corridas más.**
 cierre es relativo al objetivo de 0.40 neto y a los IC bajos que el programa demostró; con la mitad
 de ambición o un IC elite el cálculo cambiaría, pero ninguno está sobre la mesa.)
 
+## La relectura — una restricción, nueve veces (1.8)
+
+Con el cierre por amplitud (§1.7) en la mano, las nueve muertes se leen distinto de como se
+leyeron en su momento. **Al menos 5 de las 9 no murieron por lo que creímos entonces (coste,
+concentración, redundancia, efecto inexistente): murieron por AMPLITUD** — el terreno no tenía
+suficientes apuestas independientes para que ninguna señal despejara el listón.
+
+| familia | causa que le pusimos entonces | N_eff real | relectura |
+|---|---|---|---|
+| **H001** trend (9 instr) | coste (swap diario) | **3.73** | amplitud: 9 CFD macro ≈ 3.7 apuestas |
+| **H007** trend (17 instr) | coste / underpowered | **5.32** | DUPLICAR instrumentos sólo llevó N_eff a 5.3 — sigue corto |
+| **H002** carry (FX) | concentración (short-JPY) | **3.41** | «concentración» ES amplitud: N_eff 3.41, casi todo una apuesta |
+| **candidato sectorial** | sobreajuste (backtest) | **1.29** | 9 sectores a ρ0.75 = 1.3 apuestas; irresoluble por amplitud |
+| **H008** volume profile | regla de subasta sin edge | **~1.1** | 2 instrumentos a ρ0.8 → N_eff efectivo del par ~1.1 |
+| **OFI** order flow | coste (ratio 0.009-0.039) | bajo | además del coste, 1 instrumento; y cripto entero es N_eff 2.16 |
+
+Las otras (H003 estacionalidad = beta; H005/H006 = coste; COT = efecto inexistente) murieron
+por su razón propia, pero ninguna tenía amplitud para compensar. **No fueron nueve fracasos
+independientes: fue UNA restricción estructural — la amplitud efectiva del terreno accesible —
+manifestándose nueve veces con nombres distintos.** El cribado de amplitud (§1.7) la nombró de
+frente: el mejor universo accesible topa en N_eff ~8 (futuros, $50/mes) y el gratis/ilimitado
+(cripto) en 2.16. Cada familia chocó con la misma pared por un lado distinto.
+
+Esto no invalida ningún veredicto (cada uno fue correcto en sus términos) — lo UNIFICA. El
+programa no necesitaba una décima familia; necesitaba amplitud que el terreno no tiene.
+
 ## Cierre
 
 Dos ciclos, dos vehículos (CFD spot y cripto perp), nueve familias, cero edge que supere el
-suelo — y, medido de raíz, **ningún terreno accesible con la amplitud para generarlo** (§1.7). El
+suelo — y, medido de raíz, **ningún terreno accesible con la amplitud para generarlo** (§1.7),
+que en la relectura (§1.8) resulta ser la MISMA restricción tras al menos 5 de las 9 muertes. El
 programa convirtió "¿funciona X?" en números falsables y mató cada idea por la razón correcta antes
 de arriesgar capital, y finalmente midió que el límite no era una idea más sino la AMPLITUD del
 terreno al que se tiene acceso. Lo que sigue no es otra familia ni otra corrida: es medir la

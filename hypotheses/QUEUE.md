@@ -1,9 +1,16 @@
-# Cola de hipótesis — PropLab
+# Cola de hipótesis — PropLab · **PROGRAMA CERRADO**
+
+> **CIERRE FORMAL (2026-08-26, change program-close).** Nueve familias con veredicto, CERO
+> supervivientes; y —medido de raíz— ningún terreno accesible con la AMPLITUD para despejar el
+> listón (`docs/terrain_breadth.md`). La cola está VACÍA de candidatos viables. El veredicto
+> completo y la relectura por amplitud están en `docs/program_verdict.md`. **El programa se
+> reabre únicamente si se cumple una de las tres condiciones objetivas de
+> `docs/reopening_conditions.md`, citando cuál y con el número.**
 
 Estado de las hipótesis del pipeline de investigación (Flujo 2). Las fichas
 `pre_registradas` o activas viven en `hypotheses/`; las cerradas se mueven a
 `hypotheses/archive/`. La fuente de verdad del veredicto de cada una es su ficha
-YAML versionada.
+YAML versionada. **Estado final: ninguna viable.**
 
 Numeración: se respeta el listado del documento maestro §2.5 ("las seis familias
 operables"), en orden. H001 = familia 1 (trend), H002 = familia 2 (carry),
@@ -23,12 +30,32 @@ H005 = familia 5 (reversión a la media a nivel índice), H006 = familia 6
 | H006 | Intermarket / macro | intermarket | **RECHAZADA-POR-COSTE** | Price-based, duty ~100% → requerido 0.64; sin evidencia de bruto alto (lead-lag decaído). Se cierra salvo diseño de bajo duty. `docs/queue_triage.md`. |
 | **H008** | AMT / Volume Profile (cripto) | microstructure | **MUERTA** (sellada 2026-08-25, `docs/h008_block4.md`) | Novena familia. Sharpe activo del fade -0.067 ≪ listón 0.961 (con fills ≥5bps -0.986) → no viable bajo ningún supuesto. Murió por la REGLA DE SUBASTA, no por redundancia (niveles de perfil distintos de los simples, coincidencia 26%). El benchmark nulo era defectuoso (geometría rota) y su condición se retiró del veredicto. Reabierta porque el libro de cripto (bookTicker/aggTrades, gratis, ya ingerido) da volumen por nivel de precio que FX no tenía. Diseño INCREMENTAL (Δ perfil − niveles simples, bootstrap pareado) + CONDICIONAL (contexto de balance). Universo BTCUSDT+ETHUSDT (T efectiva ~189-341 con duty real 0.31). Holdout INTACTO (nunca descargado — no pasó in-sample). Ficha `hypotheses/H008_amt_volume_profile.yaml`; reporte `docs/h008_block4.md`. (Distinto del "H008" que la nota de COT dejó sin escribir.) |
 
+## Resultado del pipeline de investigación (Flujo 2), corridas 001-003
+
+El pipeline procesó **91 candidatos** ciegos en dos corridas (contador 91/200; la parada por
+las 200 quedó SUPERADA por el cierre de amplitud). Resultado: **cero candidatos operables que
+sobrevivan el cribado propio.**
+
+- **Run 001** (`docs/pipeline_run_001.md`): 40 candidatos; el cuello no es el suministro de
+  ideas sino que la mayoría de q-fin no son estrategias operables (método/teoría/modelo). Único
+  operable (crypto mean reversion 15 min, arxiv:2608.21888) reporta su propio edge 1.3 bp < 5 bp
+  coste — validación externa del muro del programa.
+- **Run 002** (`docs/pipeline_run_002.md`): 40 candidatos; densidad por fuente Quantpedia 10% vs
+  arXiv 0%. Un candidato superó el cribado de costes: **Sectoral Intramonth Momentum** (0.55) —
+  pero **MUERE en el cribado aritmético** (`docs/candidate_sectoral_screen.md`: IC del Sharpe
+  incluye el listón → irresoluble; deflación; TOM ≈ beta de mercado; N_eff sectores 1.29). NO
+  pre-registrado.
+- **Run 003:** NO ejecutada — el cribado de amplitud (`docs/terrain_breadth.md`) cerró el
+  programa; correr más pipeline perdió sentido.
+
+## Nota de numeración (histórica)
+
 Nota sobre H005: en una revisión previa se cerró un "H005 = trend con vol
 targeting" como duplicado de H001 (el vol targeting ya es la capa de sizing de
 H001). Bajo la numeración del documento maestro, **H005 = reversión a la media a
-nivel índice** (familia 5), que es una hipótesis distinta y sigue viva en cola.
-El duplicado que se cerró era el *mecanismo* "trend+vol-targeting", no la familia
-5; se conserva la nota histórica abajo para no perder el rastro.
+nivel índice** (familia 5), hipótesis distinta que quedó **RECHAZADA-POR-COSTE**
+(estado final; ya no hay cola viva). El duplicado que se cerró era el *mecanismo*
+"trend+vol-targeting", no la familia 5; se conserva la nota histórica abajo.
 
 ## Nota histórica — el "trend con vol targeting" cerrado como duplicado
 
@@ -40,9 +67,10 @@ sigue en pie: no se gasta un ciclo de test en "trend + vol targeting" como
 hipótesis separada.
 
 **Aclaración de numeración:** bajo el listado del documento maestro, **H005 =
-reversión a la media a nivel índice** (familia 5), que es una hipótesis DISTINTA y
-sigue viva en cola. El duplicado cerrado era el *mecanismo* trend+vol-targeting,
-no la familia 5. Se conserva esta nota para no perder el rastro de la decisión.
+reversión a la media a nivel índice** (familia 5), hipótesis DISTINTA, cerrada
+como RECHAZADA-POR-COSTE (estado final; la cola ya no tiene entradas vivas). El
+duplicado cerrado era el *mecanismo* trend+vol-targeting, no la familia 5. Se
+conserva esta nota para no perder el rastro de la decisión.
 
 ## Diagnósticos de primera línea (aprendidos de H001)
 
