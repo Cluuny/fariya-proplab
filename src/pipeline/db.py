@@ -35,12 +35,14 @@ TIPOS_DE_FUENTE = (
 )
 CAUSAS_DE_MUERTE = (
     "coste", "amplitud", "efecto_inexistente", "datos", "falsabilidad", "concentracion",
+    "no_estrategia",   # E2.5: el abstract no describe una regla operable (método/teoría/modelo/monitor)
 )
 ESTADOS = (
     "candidato",          # recién descubierto, sin triar
     "rechazada_operabilidad",
     "rechazada_por_datos",       # coste de datos > presupuesto, o dato no disponible
     "rechazada_por_falsabilidad",  # no mide un dato externo (ICT/SMC)
+    "rechazada_no_estrategia",   # E2.5: el abstract no describe una regla operable (método/teoría/modelo)
     "rechazada_costo",
     "requiere_lectura",   # el abstract no reporta bruto → baja prioridad, no se descarta
     "en_cola",            # pasó los triajes, esperando test

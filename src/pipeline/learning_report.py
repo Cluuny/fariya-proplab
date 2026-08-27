@@ -53,6 +53,33 @@ def _rows_por_tipo_fuente(conn) -> list[dict]:
     return [dict(r) for r in conn.execute(sql).fetchall()]
 
 
+# Estados de rechazo ANTERIORES o EN el eje es_estrategia_operable (no pasaron el eje).
+_PRE_O_EN_EJE_ESTRATEGIA = (
+    "candidato", "rechazada_operabilidad", "rechazada_por_falsabilidad",
+    "rechazada_por_datos", "rechazada_no_estrategia",
+)
+
+
+def _densidad_estrategia_por_fuente(conn) -> list[dict]:
+    """DENSIDAD DE ESTRATEGIAS OPERABLES POR FUENTE = pasan es_estrategia_operable / descubiertos.
+
+    El número que dice DÓNDE BUSCAR. `descubiertos` = filas procesadas (estado != 'candidato')
+    de esa fuente; `pasan_eje` = las que superaron el eje es_estrategia_operable (estado no está
+    entre los rechazos anteriores o en el propio eje). Se reporta por `fuente` en cada corrida."""
+    placeholders = ",".join("?" * len(_PRE_O_EN_EJE_ESTRATEGIA))
+    sql = f"""
+        SELECT fuente,
+               SUM(CASE WHEN estado != 'candidato' THEN 1 ELSE 0 END) AS descubiertos,
+               SUM(CASE WHEN estado NOT IN ({placeholders}) THEN 1 ELSE 0 END) AS pasan_eje
+        FROM hipotesis
+        WHERE fuente IS NOT NULL
+        GROUP BY fuente
+        HAVING descubiertos > 0
+        ORDER BY pasan_eje * 1.0 / descubiertos DESC, descubiertos DESC
+    """
+    return [dict(r) for r in conn.execute(sql, _PRE_O_EN_EJE_ESTRATEGIA).fetchall()]
+
+
 def _calibracion(conn) -> list[dict]:
     """Filas realmente CORRIDAS a un veredicto de Sharpe con esperado y medido."""
     sql = """
@@ -125,6 +152,22 @@ def report(conn) -> str:
                  "no académicas (reddit/twitter/discord/youtube) producen algo testeable o sólo "
                  "contenido. Todas pasan por los mismos filtros.")
     lines.append("")
+
+    # DENSIDAD DE ESTRATEGIAS OPERABLES POR FUENTE (el número que dice dónde buscar).
+    dens = _densidad_estrategia_por_fuente(conn)
+    if dens:
+        lines.append("## Densidad de estrategias operables por fuente")
+        lines.append("")
+        lines.append("| fuente | descubiertos | pasan es_estrategia_operable | densidad |")
+        lines.append("|---|---|---|---|")
+        for r in dens:
+            de, pa = r["descubiertos"], r["pasan_eje"]
+            lines.append(f"| {r['fuente']} | {de} | {pa} | {(pa/de) if de else 0:.0%} |")
+        lines.append("")
+        lines.append("**Densidad = pasan es_estrategia_operable / descubiertos.** Es el número que "
+                     "dice DÓNDE BUSCAR: una fuente de estrategias destiladas (Quantpedia) debería "
+                     "densificar más que un repositorio de metodología (arXiv). Se mide, no se asume.")
+        lines.append("")
 
     # causa de muerte
     lines.append("## Causa de muerte")

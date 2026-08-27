@@ -35,6 +35,10 @@ MICROSTRUCTURE_TERMS = (
 RSS_FEEDS = {
     "alpha_architect": "https://alphaarchitect.com/feed/",
     "cxo": "https://www.cxoadvisory.com/feed/",
+    # Quantpedia: base de estrategias YA destiladas → mayor densidad esperada de reglas
+    # operables (rebalanceo de fuentes, corrida 002). El feed mezcla estrategias con avisos
+    # de producto (API/newsletter); los avisos mueren en el eje es_estrategia_operable.
+    "quantpedia": "https://quantpedia.com/feed/",
 }
 _ATOM_NS = {"a": "http://www.w3.org/2005/Atom"}
 _USER_AGENT = "PropLab-research-pipeline/1 (monthly discovery; contact vicente@getvaas.com)"
