@@ -124,6 +124,29 @@ exige — salió del pipeline de investigación (MP001, reabierta con datos grat
 pre-registró con falsador y se testeó. Murió (Sharpe activo -0.067 ≪ 0.961). Cualquier
 familia futura debe entrar por esa misma vía — nunca de una intuición.
 
+## Validación externa de una conclusión propia (1.6)
+
+El pipeline, en su corrida 002 (`docs/pipeline_run_002.md`), surfó un preprint independiente
+que **valida desde fuera una CONCLUSIÓN del programa, no sólo el motor.** Hasta ahora la única
+validación externa era del MOTOR (H001 neto 0.08-0.14 vs SG CTA Trend 0.14). Ésta es de una
+CONCLUSIÓN:
+
+**arxiv:2608.21888 (Short-horizon mean reversion in cryptocurrency markets, 2026)** mide, sobre
+183 pares de Binance con protocolo estrictamente out-of-sample + holdout congelado de 6 meses,
+un edge de reversión direccional a 15 min que **«peaks near 1.3 bp per trade against a 5 bp
+round-trip cost: large enough to detect, too small to clear costs».** Es EL MISMO muro que el
+programa encontró por su cuenta, en el MISMO mercado (cripto), dos veces:
+
+- **OFI** (Cont-Kukanov-Stoikov en BTCUSDT): señal real pero minúscula, **ratio señal/coste
+  0.009-0.039** (coste 25-100× la señal) → order flow cerrado.
+- **H008** (subasta/volume profile): niveles informativos pero Sharpe activo del fade -0.067,
+  sub-listón; la regla de subasta no netea.
+
+Un grupo independiente, con datos y método propios, reporta la misma física: **en microestructura
+de cripto hay señal contemporánea/de corto plazo real, pero el coste la supera.** No es una cita
+que confirme nuestro código; es una réplica externa de nuestra CONCLUSIÓN de que el cuello es el
+coste/vehículo, no la ausencia de señal. Primera de su tipo en el programa.
+
 ## Cierre
 
 Dos ciclos, dos vehículos (CFD spot y cripto perp), nueve familias, cero edge que supere el

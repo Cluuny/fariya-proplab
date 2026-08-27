@@ -107,3 +107,10 @@ def test_operability_acronym_not_substring_false_positive():
     v2 = top.triage_operability({"titulo": "ICT order blocks and fair value gaps",
         "abstract": "We trade order blocks drawn on the chart."})
     assert v2.decision == "reject" and v2.categoria == "falsabilidad"
+
+
+def test_extract_sharpe_number_before_word():
+    # "0.55 Sharpe ratio" (número ANTES de Sharpe) — hallado en la run 002 (momentum sectorial)
+    val, cita = estimate.extract_bruto_reportado(
+        {"abstract": "delivers 5.99% annualized return at a 0.55 Sharpe ratio for the long-short variant"})
+    assert val == 0.55 and "abstract" in cita

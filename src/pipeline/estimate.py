@@ -75,6 +75,12 @@ _SHARPE_RE = re.compile(
     r"(\d+(?:\.\d+)?)",
     re.IGNORECASE,
 )
+# número ANTES de "Sharpe": "a 0.55 Sharpe ratio", "0.9 Sharpe" (frase muy común; la run 002 la
+# halló en el paper de momentum sectorial). Se excluye si el número lleva '%' (es un retorno).
+_SHARPE_RE_PRE = re.compile(
+    r"(\d+(?:\.\d+)?)\s*(?:annualized\s+|annual\s+|net\s+|gross\s+)?sharpe",
+    re.IGNORECASE,
+)
 
 
 def _text(candidate: dict) -> str:
@@ -152,13 +158,23 @@ def extract_bruto_reportado(candidate: dict) -> tuple[float | None, str | None]:
     """
     abstract = candidate.get("abstract") or ""
     best, best_span = None, None
-    for m in _SHARPE_RE.finditer(abstract):
-        val = float(m.group(1))
-        if _SHARPE_MIN <= val <= _SHARPE_MAX and (best is None or val > best):
-            best, best_span = val, m.group(0)
+    for rx in (_SHARPE_RE, _SHARPE_RE_PRE):
+        for m in rx.finditer(abstract):
+            # excluir números que en realidad son porcentajes (retornos): "5.99% ... Sharpe"
+            if m.group(0).lstrip().startswith(m.group(1)) and _pct_after(abstract, m):
+                continue
+            val = float(m.group(1))
+            if _SHARPE_MIN <= val <= _SHARPE_MAX and (best is None or val > best):
+                best, best_span = val, m.group(0)
     if best is None:
         return None, None
     return best, f'abstract ("{best_span.strip()}")'
+
+
+def _pct_after(text: str, m) -> bool:
+    """True si el número casado va inmediatamente seguido de '%' (es un retorno, no un Sharpe)."""
+    end = m.start(1) + len(m.group(1))
+    return end < len(text) and text[end:end + 1] == "%"
 
 
 def estimate_fields(candidate: dict) -> dict:
@@ -181,6 +197,61 @@ def estimate_fields(candidate: dict) -> dict:
         out["trades_por_dia_estimado"] = estimate_trades_por_dia(text, frec)
         out["contrato_ref"] = estimate_contrato(text)
     return out
+
+
+# =====================================================================================
+# DÉCIMO EJE — es_estrategia_operable (E2.5, determinista, sobre el abstract)
+# =====================================================================================
+# La corrida 001 mostró que el modo de muerte DOMINANTE (10 de 11 supervivientes de E2) es
+# «esto no es una estrategia operable, es un método / teoría / modelo / monitor». Los 9 ejes
+# del adversario (E5) PRESUPONEN que hay estrategia, así que no lo detectan. Este eje va ANTES
+# (en E2.5, determinista) para matar ese caso barato y ahorrar ~90% del trabajo de sesión.
+#
+# Regla: se RECHAZA salvo que el abstract muestre una REGLA DE ENTRADA/SALIDA direccional
+# identificable. Dos pasos: (1) descalificadores de ALTA PRECISIÓN (método/teoría/modelo/
+# monitor/herramienta) → rechazo; (2) si no, exige al menos una señal de REGLA operable → si
+# no hay, rechazo. Calibrado contra las 11 fichas de la run 001 (10 mueren, mean-reversion
+# sobrevive) y contra controles positivos (TSMOM/carry/TOM sobreviven). Ver test de regresión.
+
+# (1) descalificadores: el abstract es sobre un MÉTODO/TEORÍA/MODELO/MONITOR/HERRAMIENTA
+_NOT_STRATEGY = (
+    "reinforcement learning", "generative model", "flow matching", "generator of", "generation with",
+    "simulator", "we simulate", "conditional mean independence", "independence test",
+    "we propose a test", "robustness grade", "robustness score", "post-selection robustness",
+    "portfolio optimization", "optimal control", "dynamic portfolio", "stochastic control",
+    "impulse control", "canonical form", "axiomatic", "latent regularity",
+    "spectral radius", "loop gain", "loop-gain", "monitoring",
+    "likely outcomes for", "examine the costs", "compare performance", "meld stocks",
+    "a python library", "api for", "software",
+)
+# (2) señales POSITIVAS de una regla de entrada/salida direccional.
+# OJO: se exige un verbo de EJECUCIÓN o una familia de estrategia nombrada — NO basta "predict"
+# ni "signal" a secas. Es la lección propia del programa (H003/OFI): PREDECIR ≠ NEGOCIAR; una
+# señal predictiva no es una estrategia. "trading signal" sí (lleva ejecución implícita).
+_STRATEGY_RULE = (
+    "go long", "go short", "long-short", "long/short", "buy when", "sell when",
+    "betting against", "bet against", "fade", "we trade", "trading rule", "trading strategy",
+    "trading signal", "mean reversion", "mean-reversion", "reversal", "momentum",
+    "trend following", "trend-following", "carry", "overweight", "underweight", "market timing",
+    "rebalanc", "we buy", "we sell", "long the", "short the", "anomaly", "risk premium",
+    "seasonal", "per trade",
+)
+
+
+def is_operable_strategy(candidate: dict) -> tuple[bool, str]:
+    """¿El abstract describe una REGLA de entrada/salida operable, o es método/teoría/modelo/monitor?
+
+    Determinista, sobre título+abstract. Devuelve (es_estrategia, razón). Descalificadores de
+    alta precisión primero; si no, exige una señal de regla operable. Es el eje que la corrida
+    001 demostró que faltaba (10 de 11 muertes eran «no es una estrategia»)."""
+    text = _text(candidate)
+    for n in _NOT_STRATEGY:
+        if n in text:
+            return False, f"no es estrategia operable: '{n}' (método/teoría/modelo/monitor)"
+    for n in _STRATEGY_RULE:
+        if n in text:
+            return True, f"regla operable identificable ('{n}')"
+    return False, "sin regla de entrada/salida direccional identificable en el abstract"
 
 
 # ---- fuente: peso para la prioridad (papers arbitrados por delante de blogs) ----

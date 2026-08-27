@@ -50,7 +50,15 @@ def cmd_triage(conn, args):
         if op.decision == "reject":
             print(f"  {c['id']:24s} OP reject — {op.razon}")
             continue
-        # E2.5: estimar de forma DETERMINISTA los campos que el triaje de costos necesita
+        # E2.5a: DÉCIMO EJE — ¿es una estrategia operable, o método/teoría/modelo/monitor?
+        # (determinista, sobre el abstract; ANTES del adversario, que presupone estrategia).
+        es_estrat, razon_es = estimate.is_operable_strategy(c)
+        if not es_estrat:
+            db.upsert(conn, {"id": c["id"], "estado": "rechazada_no_estrategia",
+                             "causa_de_muerte": "no_estrategia", "triage_operabilidad_razon": razon_es})
+            print(f"  {c['id']:24s} OP keep · NO-ESTRATEGIA — {razon_es}")
+            continue
+        # E2.5b: estimar de forma DETERMINISTA los campos que el triaje de costos necesita
         # (frecuencia, duty, bruto reportado si está en el abstract). Sin esto, arXiv no se
         # puede cost-triar (los campos vienen vacíos). Ver src/pipeline/estimate.py.
         est = estimate.estimate_fields(c)
