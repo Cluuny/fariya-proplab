@@ -31,7 +31,13 @@ VEHICULOS = {
     "cfd": 0.24,
     "futures": 0.024,
 }
-UMBRAL_NETO = 0.40  # el net Sharpe objetivo (metrica_exito del proyecto)
+# UMBRAL_NETO = 0.40 net POR ESTRATEGIA. La razón (change e3-recalibration): el objetivo NO es
+# una estrategia con Sharpe 0.8, es CUATRO estrategias DESCORRELACIONADAS con 0.4 cada una →
+# 0.4·√4 = 0.8. Ésa es la única amplitud que el terreno no agota: BR viene de estrategias
+# INDEPENDIENTES, no sólo de instrumentos (cuatro estrategias descorrelacionadas sobre los mismos
+# 17 instrumentos multiplican BR ×4). Por tanto el listón POR CANDIDATO es 0.4 neto, y hacen falta
+# CUATRO que lo superen Y que NO correlacionen entre sí (ver campo familia_de_riesgo).
+UMBRAL_NETO = 0.40  # net Sharpe objetivo POR ESTRATEGIA (metrica_exito del proyecto)
 
 # Listones MEDIDOS de referencia (bruto requerido), recalibrados con ambos ciclos.
 # Se usan para reportar contra qué se compara cada candidato (docs/program_verdict.md,
@@ -101,15 +107,19 @@ def triage_costs(candidate: dict) -> CostVerdict:
                            "el abstract no reporta bruto; baja prioridad, pendiente de lectura",
                            req_cfd, req_fut)
 
-    pasa_cfd, pasa_fut = reportado > req_cfd, reportado > req_fut
+    # HAIRCUT DE DEGRADACIÓN: el reportado es in-sample/otro-mercado → bruto REALIZADO esperado.
+    efectivo = costs_model.bruto_efectivo(reportado)
+    pasa_cfd, pasa_fut = efectivo > req_cfd, efectivo > req_fut
     if pasa_cfd or pasa_fut:
         vh = "CFD y futuros" if (pasa_cfd and pasa_fut) else ("CFD" if pasa_cfd else "futuros")
         return CostVerdict("keep",
-                           f"bruto {reportado:.2f} supera el requerido en {vh} "
-                           f"(cfd {req_cfd:.2f}, fut {req_fut:.2f})", req_cfd, req_fut)
+                           f"bruto efectivo {efectivo:.2f} (reportado {reportado:.2f}×{costs_model.FACTOR_DEGRADACION}) "
+                           f"supera el requerido en {vh} (cfd {req_cfd:.2f}, fut {req_fut:.2f})",
+                           req_cfd, req_fut)
     return CostVerdict("reject",
-                       f"bruto {reportado:.2f} < requerido en ambos vehículos "
-                       f"(cfd {req_cfd:.2f}, fut {req_fut:.2f})", req_cfd, req_fut)
+                       f"bruto efectivo {efectivo:.2f} (reportado {reportado:.2f}×{costs_model.FACTOR_DEGRADACION}) "
+                       f"< requerido en ambos vehículos (cfd {req_cfd:.2f}, fut {req_fut:.2f})",
+                       req_cfd, req_fut)
 
 
 def _triage_intraday(candidate: dict) -> CostVerdict:
@@ -126,14 +136,15 @@ def _triage_intraday(candidate: dict) -> CostVerdict:
                            f"intradía {contrato} {trades}/día: sin bruto reportado; "
                            f"requerido {req_id:.2f}, pendiente de lectura",
                            req_cfd, req_fut, requerido_intraday=req_id)
-    if reportado > req_id:
+    efectivo = costs_model.bruto_efectivo(reportado)
+    if efectivo > req_id:
         return CostVerdict("keep",
-                           f"bruto {reportado:.2f} supera el requerido intradía "
-                           f"{req_id:.2f} ({contrato}, {trades}/día)",
+                           f"bruto efectivo {efectivo:.2f} (reportado {reportado:.2f}×{costs_model.FACTOR_DEGRADACION}) "
+                           f"supera el requerido intradía {req_id:.2f} ({contrato}, {trades}/día)",
                            req_cfd, req_fut, requerido_intraday=req_id)
     return CostVerdict("reject",
-                       f"bruto {reportado:.2f} < requerido intradía {req_id:.2f} "
-                       f"({contrato}, {trades}/día — lo domina rotar)",
+                       f"bruto efectivo {efectivo:.2f} (reportado {reportado:.2f}×{costs_model.FACTOR_DEGRADACION}) "
+                       f"< requerido intradía {req_id:.2f} ({contrato}, {trades}/día — lo domina rotar)",
                        req_cfd, req_fut, requerido_intraday=req_id)
 
 

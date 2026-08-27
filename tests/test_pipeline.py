@@ -100,8 +100,9 @@ def test_cost_triage_rejects_low_gross_both_vehicles():
 
 
 def test_cost_triage_keeps_when_clears_futures_only():
-    v = triage_costs.triage_costs({"duty_cycle_estimado": 1.0, "bruto_reportado": 0.50})
-    assert v.decision == "keep" and "futuros" in v.razon   # 0.50 > 0.424 but < 0.64
+    # con el FACTOR DE DEGRADACIÓN (0.35): reportado 1.5 → efectivo 0.525, entre 0.424 (fut) y 0.64 (CFD)
+    v = triage_costs.triage_costs({"duty_cycle_estimado": 1.0, "bruto_reportado": 1.5})
+    assert v.decision == "keep" and "futuros" in v.razon
 
 
 def test_cost_triage_requires_reading_when_no_gross():

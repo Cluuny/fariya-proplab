@@ -67,6 +67,33 @@ def break_even(vol_objetivo: float, gross: float, turnover: float, **kw) -> floa
 # Break-even gross Sharpe at 100% duty (margin cost / vol at gross ~1.7, vol 8%).
 BREAKEVEN_FULL_DUTY = 0.24
 
+# =========================================================================== #
+# FACTOR DE DEGRADACIÓN — el bruto REPORTADO no es el bruto que realizaremos.   #
+# =========================================================================== #
+# Un Sharpe de paper es IN-SAMPLE, sin deflactar, en OTRO mercado/período y sin
+# nuestros costos ni nuestra amplitud. E3 comparaba el reportado CRUDO contra el
+# listón (el Sectoral pasó con 0.55 y murió en el cribado con IC95 [0.17,0.93]).
+# Se introduce un haircut calibrado con EVIDENCIA PROPIA: reportado → nuestro BRUTO
+# realizado esperado. (Es un factor reportado→BRUTO, NO reportado→neto: el suelo de
+# costes se aplica DESPUÉS, en sharpe_bruto_requerido_duty.)
+#
+# Calibración (reportado → bruto medido nuestro):
+#   TSMOM (Moskowitz-Ooi-Pedersen)  ~1.2  → 0.37 bruto (H001-A)   ratio 0.31
+#   TOM  (McConnell-Xu)             fuerte → 0.26 = media del nulo  ratio ~0
+#   Sectoral Intramonth Momentum    0.55  → IC95 [0.17,0.93], punto ~0.4  ratio ~0.7
+#   Trend industria (SG CTA)        —      → 0.32 bruto de comisiones
+# Media defendible de las tres razones con número ≈ 0.35.
+#
+# PROVISIONAL: 3-4 puntos de calibración. Se refina con cada candidato testeado
+# (learning_report registra reportado vs medido). Con más puntos el factor migra.
+FACTOR_DEGRADACION = 0.35
+
+
+def bruto_efectivo(bruto_reportado: float, factor: float = FACTOR_DEGRADACION) -> float:
+    """Bruto que esperamos REALIZAR a partir del reportado en el paper (haircut de degradación).
+    Es un bruto (el suelo de costes se compara aparte, en sharpe_bruto_requerido_duty)."""
+    return bruto_reportado * factor
+
 
 def sharpe_bruto_requerido_duty(duty_cycle: float, umbral: float = 0.40,
                                 breakeven_full: float = BREAKEVEN_FULL_DUTY) -> float:

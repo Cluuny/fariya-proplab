@@ -201,21 +201,27 @@ que usan vocabulario de estrategia — **E4 (la lectura) es el respaldo, no el e
 ### E3 — Costes (`triage_costs.py:76`)
 
 Aritmética pura, sin datos nuevos. Rutea por frecuencia:
-- **EOD:** listón = `bruto_requerido(duty, vehiculo)` (`triage_costs.py:55`), que llama a
-  `costs_model.sharpe_bruto_requerido_duty` con `UMBRAL_NETO = 0.40` (`:34`) y el break-even del
+- **EOD:** listón = `bruto_requerido(duty, vehiculo)` (`triage_costs.py:61`), que llama a
+  `costs_model.sharpe_bruto_requerido_duty` con `UMBRAL_NETO = 0.40` (`:40`) y el break-even del
   vehículo (`VEHICULOS`, `:30`: CFD 0.24 → requerido **0.64** a duty 1.0; futuros 0.024 → **0.42**).
   Se evalúa contra AMBOS vehículos.
 - **Intradía:** listón por rotación (`costs_model.sharpe_bruto_requerido_intraday`), donde lo
   domina rotar, no mantener.
-- **Regla común:** `bruto_reportado` ausente → **`requiere_lectura`** (no se descarta, baja
-  prioridad); `> requerido` → `keep`; `<= requerido` → `reject`.
+- **FACTOR DE DEGRADACIÓN (change e3-recalibration):** el reportado es in-sample/otro-mercado, así
+  que se descuenta antes de comparar: **`bruto_efectivo = bruto_reportado × 0.35`**
+  (`costs_model.FACTOR_DEGRADACION`, calibrado con TSMOM 1.2→0.37, TOM ~0, Sectoral 0.55→~0.4).
+- **Regla común:** `bruto_reportado` ausente → **`requiere_lectura`**; `bruto_efectivo > requerido`
+  → `keep`; si no → `reject`. Un paper necesita reportar **~1.20 (futuros) / ~1.83 (CFD)** para
+  sobrevivir E3 — el 0.55 del Sectoral da efectivo 0.19 y **muere en E3** (antes pasaba). Ver
+  `docs/e3_recalibration.md`.
 
 **De dónde salen duty y turnover:** de `estimate_fields` (E2.5), por keywords — son ESTIMACIONES
 del abstract, no del paper. El duty por defecto (1.0, o 0.15 si calendario) puede estar lejos del
 real (H008: 0.20 a priori → 0.31 medido). **Qué pasa cuando el abstract no reporta Sharpe:** casi
-siempre (arXiv no reporta Sharpe en el abstract) → `requiere_lectura`. Por eso **E3 mató 0 en
-ambas corridas**: no puede decidir sin el número, y el número está en el PDF. El coste decide al
-LEER, no en el cribado. (Cuando el número SÍ está —Sectoral 0.55— E3 sí decide.)
+siempre → `requiere_lectura`. En las corridas 001-002 E3 mató 0 por esto; con la recalibración E3
+mata **1** (el Sectoral, retro-test). Se intenta estimar el bruto de OTRAS métricas (IR, ret/vol,
+t-stat/√años, `extract_bruto_estimado`), pero en el retro-test rescató **0/80** (los abstracts no
+las traen). El cuello sigue siendo que los abstracts no cuantifican: el coste decide al LEER.
 
 ---
 
@@ -307,14 +313,16 @@ Modos de fallo CONOCIDOS, con lo que se hace (o no) al respecto:
 3. **Un falsador puede pasar el esquema y ser INÚTIL.** `validate_extraction` exige que `falsador`
    sea un string no vacío, no que sea BUENO. Un «se descarta si no funciona» pasa la validación.
    *Qué se hace:* la compuerta humana lo revisa (es el defecto D3 de `extraction_defects.md`).
-4. **El Sharpe reportado puede ser in-sample, sin deflactar, y E3 lo toma TAL CUAL.** `bruto_reportado`
-   es lo que dice el abstract; E3 no lo deflacta ni comprueba multiplicidad. El Sectoral Momentum
-   pasó E3 con 0.55 y luego murió en el cribado aritmético (deflación, IC). *Qué se hace:* el cribado
-   aritmético (`candidate_screen.py`) ANTES de pre-registrar. *Qué NO:* E3 por sí solo no protege
-   contra un backtest sobreajustado.
-5. **Bugs de subcadena de keywords.** Aparecieron TRES veces (ict⊂predict, carry⊂carrying,
-   long-the⊂along-the) y causaron falsos rechazos (Is-Trend-Still-Your-Friend por «fundamental») y
-   falsos positivos del eje. *Qué se hace:* los gates de DECISIÓN usan límite de palabra
+4. **El Sharpe reportado puede ser in-sample, sin deflactar.** `bruto_reportado` es lo que dice el
+   abstract. *Qué se hace (change e3-recalibration):* E3 ahora aplica un **factor de degradación
+   0.35** antes de comparar (`docs/e3_recalibration.md`) — el Sectoral 0.55 → efectivo 0.19 muere en
+   E3, no en el cribado posterior. *Qué NO:* el 0.35 es PROVISIONAL (3-4 puntos) y no comprueba
+   multiplicidad por candidato; el cribado aritmético (`candidate_screen.py`) sigue siendo el
+   respaldo antes de pre-registrar.
+5. **Bugs de subcadena/verbo de keywords.** Aparecieron CUATRO veces (ict⊂predict, carry⊂carrying,
+   long-the⊂along-the, y «carry» como VERBO clasificando mean-reversion como carry) y causaron
+   falsos rechazos (Is-Trend-Still-Your-Friend por «fundamental») y falsos positivos del eje y de la
+   familia de riesgo. *Qué se hace:* los gates de DECISIÓN usan límite de palabra
    (`_hits_word`) + un test genérico (`tests/test_pipeline_word_boundary.py`). *Qué NO:* las listas
    permisivas de clasificación (fundamentals/options en E2) aún casan por subcadena → aún hay falsos
    rechazos posibles.
