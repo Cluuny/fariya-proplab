@@ -213,7 +213,8 @@ def estimate_fields(candidate: dict) -> dict:
 # no hay, rechazo. Calibrado contra las 11 fichas de la run 001 (10 mueren, mean-reversion
 # sobrevive) y contra controles positivos (TSMOM/carry/TOM sobreviven). Ver test de regresión.
 
-# (1) descalificadores: el abstract es sobre un MÉTODO/TEORÍA/MODELO/MONITOR/HERRAMIENTA
+# (1) descalificadores: el abstract es sobre un MÉTODO/TEORÍA/MODELO/MONITOR/HERRAMIENTA.
+# +meta/tooling tras la run 002 (el post de la API de Quantpedia «validaba estrategias», no era una).
 _NOT_STRATEGY = (
     "reinforcement learning", "generative model", "flow matching", "generator of", "generation with",
     "simulator", "we simulate", "conditional mean independence", "independence test",
@@ -223,35 +224,60 @@ _NOT_STRATEGY = (
     "spectral radius", "loop gain", "loop-gain", "monitoring",
     "likely outcomes for", "examine the costs", "compare performance", "meld stocks",
     "a python library", "api for", "software",
+    "benchmark dataset", "nearest neighbour", "nearest neighbor", "validating new",
 )
-# (2) señales POSITIVAS de una regla de entrada/salida direccional.
-# OJO: se exige un verbo de EJECUCIÓN o una familia de estrategia nombrada — NO basta "predict"
-# ni "signal" a secas. Es la lección propia del programa (H003/OFI): PREDECIR ≠ NEGOCIAR; una
-# señal predictiva no es una estrategia. "trading signal" sí (lleva ejecución implícita).
+# (1b) HORIZONTE INOPERABLE (< 1 min): el suelo de costes intradía (docs/cost_floor.md) hace que
+# rotar a horizonte de segundos sea inviable a nuestras fees (lección OFI: predictivo a 1s pero
+# sub-coste). Un paper cuyo horizonte de posición es sub-minuto se RECHAZA por operabilidad, aunque
+# tenga señal (run 002: «Public Trader Identity», R² a 1 s). NO afecta a horizontes ≥ 1 min (la
+# mean reversion a 15 min sobrevive).
+_INOPERABLE_HORIZON = (
+    "millisecond", "microsecond", "nanosecond", "sub-second", "one-second", "1-second",
+    "per second", "per-second", "second returns", "second-ahead", "high-frequency", "high frequency",
+)
+# (2) señales POSITIVAS de una POSICIÓN DIRECCIONAL (verbo de ejecución o familia nombrada).
+# Se casan con LÍMITE DE PALABRA (\b): sin él, «carry» casaba dentro de «carrying» y «long the»
+# dentro de «along the» (falsos positivos hallados en la run 002 — mismo bug que «ict»⊂«predict»).
+# NO basta «predict»/«signal» a secas (lección H003/OFI: PREDECIR ≠ NEGOCIAR).
 _STRATEGY_RULE = (
     "go long", "go short", "long-short", "long/short", "buy when", "sell when",
     "betting against", "bet against", "fade", "we trade", "trading rule", "trading strategy",
     "trading signal", "mean reversion", "mean-reversion", "reversal", "momentum",
     "trend following", "trend-following", "carry", "overweight", "underweight", "market timing",
-    "rebalanc", "we buy", "we sell", "long the", "short the", "anomaly", "risk premium",
-    "seasonal", "per trade",
+    "rebalance", "rebalancing", "rebalanced", "we buy", "we sell", "long the", "short the",
+    "anomaly", "risk premium", "seasonal", "per trade",
 )
 
 
-def is_operable_strategy(candidate: dict) -> tuple[bool, str]:
-    """¿El abstract describe una REGLA de entrada/salida operable, o es método/teoría/modelo/monitor?
+def _hits_word(text: str, needles) -> str | None:
+    """Coincidencia con LÍMITE DE PALABRA: evita que un término corto case dentro de otra palabra
+    ('carry' en 'carrying', 'long the' en 'along the'). Multi-palabra también casa con \\b."""
+    for n in needles:
+        if re.search(r"\b" + re.escape(n) + r"\b", text):
+            return n
+    return None
 
-    Determinista, sobre título+abstract. Devuelve (es_estrategia, razón). Descalificadores de
-    alta precisión primero; si no, exige una señal de regla operable. Es el eje que la corrida
-    001 demostró que faltaba (10 de 11 muertes eran «no es una estrategia»)."""
+
+def is_operable_strategy(candidate: dict) -> tuple[bool, str]:
+    """¿El abstract describe una POSICIÓN DIRECCIONAL a un horizonte operable, o es método/teoría/
+    modelo/monitor/herramienta, o una señal a horizonte inoperable?
+
+    Determinista, sobre título+abstract. Refinado tras la run 002 (los 4 falsos positivos
+    describían algo MEDIBLE pero no una POSICIÓN, o una posición a horizonte inoperable): (1)
+    descalificadores método/teoría/modelo/monitor/tooling; (1b) rechazo por horizonte < 1 min
+    (suelo de costes intradía); (2) exige una señal de posición direccional (verbo o familia), con
+    límite de palabra. Devuelve (es_estrategia, razón)."""
     text = _text(candidate)
     for n in _NOT_STRATEGY:
         if n in text:
-            return False, f"no es estrategia operable: '{n}' (método/teoría/modelo/monitor)"
-    for n in _STRATEGY_RULE:
-        if n in text:
-            return True, f"regla operable identificable ('{n}')"
-    return False, "sin regla de entrada/salida direccional identificable en el abstract"
+            return False, f"no es estrategia operable: '{n}' (método/teoría/modelo/monitor/tooling)"
+    h = _hits_word(text, _INOPERABLE_HORIZON)
+    if h:
+        return False, f"horizonte de posición inoperable: '{h}' (< 1 min, sub-coste intradía)"
+    p = _hits_word(text, _STRATEGY_RULE)
+    if p:
+        return True, f"posición direccional identificable ('{p}')"
+    return False, "sin posición direccional (dirección + horizonte) identificable en el abstract"
 
 
 # ---- fuente: peso para la prioridad (papers arbitrados por delante de blogs) ----

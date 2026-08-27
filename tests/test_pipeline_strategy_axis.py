@@ -89,3 +89,43 @@ def test_prediction_alone_is_not_a_strategy():
     # pero una FAMILIA de estrategia nombrada o un verbo de ejecución sí
     ok2, _ = estimate.is_operable_strategy({"titulo": "", "abstract": "a momentum strategy: we go long winners"})
     assert ok2
+
+
+# ===== Refinamiento run 002: los 4 falsos positivos deben morir, el sectorial sobrevive =====
+RUN002_SURVIVORS = [
+    ("arxiv:2608.10788", "The Triadic Stress Index in Financial Markets",
+     "The Triadic Stress Index (TSI) takes a network index whose four factors were first observed in soil microbiome co-occurrence networks and applies it, without alteration, to the correlation network of financial assets. We test it on five markets spanning 2006-2026 (equities including banking crises and the AI sector, cryptocurrencies, commodities, foreign exchange and sovereign debt), against three independent definitions of a crisis episode, at a fixed alarm budget, out of sample, with block-bootstrap intervals and a Holm correction across the family of tests. The benchmarks are the Absorption Ratio, the industry standard used by MSCI and central banks; the effective rank and the Vendi score"),
+    ("quantpedia:https-quantpedia-com-sectoral-intramonth-momentum-cycle", "Sectoral Intramonth Momentum Cycle: Exploiting Turn-of-the-Month Patterns in Sector ETF Strategies",
+     "We document a persistent intramonth momentum cycle in U.S. sector ETFs that yields meaningful risk-adjusted returns when properly sequenced. Using the nine original Select Sector SPDR ETFs and SPY as the market benchmark from December 1998 through June 2026, we show that trailing 252-day sector momentum generates a positive spread on the first trading day of the month\u2014and then sharply reverses on days two and three. A third, independent leg of the cycle emerges in the window from ten to five trading days before month-end, consistent with the intramonth momentum cycle recently documented at the single-stock level by Nathan, Suominen and Tasa (2026). Stitching the three legs togethe"),
+    ("quantpedia:https-quantpedia-com-from-backtest-to-benchmark-validating-n", "From Backtest to Benchmark: Validating New Strategies with Quantpedia API",
+     "A profitable backtest is rarely the end of a research process. In professional quantitative research, the more important question often comes after the first positive result: is the strategy genuinely new, or is it simply another version of an already known factor, timing rule, or anomaly? This is especially relevant when a researcher develops a new systematic strategy with a clean historical equity curve. The strategy may have acceptable risk-adjusted performance, stable drawdowns, and a logical trading rule, but those statistics alone do not prove that the idea is unique. A silver strategy, for example, may look different on the surface while still behaving like a known commodit"),
+    ("arxiv:2608.07709", "Microstructural Foundation for the Rough Hawkes--Heston Model",
+     "Hawkes-based microstructural foundations for rough volatility, leverage, and rough Heston-type limits were developed by El Euch et al. (2018, Finance Stoch., 22(2), 241--280) and connected to the affine rough Heston framework of El Euch and Rosenbaum (2019, Math. Finance, 29(1), 3--38). The rough Hawkes--Heston model with common price--volatility jumps of Bondi et al. (2024, Math. Finance, 34(4), 1197--1241) extends this framework by adding state-dependent common jumps to rough affine volatility. We provide a microstructural foundation for its variance and common-jump mechanism by constructing a Poisson-embedded marked Hawkes order-flow model. Ordinary arrivals generate rough continuous vola"),
+    ("arxiv:2608.04373", "Public Trader Identity: Adverse Selection and Return Predictability",
+     "Informed traders are supposed to need anonymity: they profit by hiding among the uninformed. A decentralized exchange now publishes the counterparty. Every committed order, cancellation, rejection, and fill carries a persistent pseudonymous wallet address. We reconstruct the full-depth limit order book from a record of 17.1 billion messages and 14.3 million aggressive orders by 147,113 wallets, covering $84.3 billion in taker notional. We report three findings. First, informativeness is a persistent wallet attribute. Wallets ranked by the price movement following their aggressive orders retain that ordering across adjacent ten-day windows, with a rank correlation of 0.52. Second, the ranking"),
+]
+
+_SECTORAL_ID_SUBSTR = "sectoral"
+
+
+def test_run002_4_falsos_positivos_mueren_sectorial_sobrevive():
+    survive, kill = [], []
+    for id_, titulo, abstract in RUN002_SURVIVORS:
+        ok, _ = estimate.is_operable_strategy({"titulo": titulo, "abstract": abstract})
+        (survive if ok else kill).append(id_)
+    # sólo el candidato sectorial (estrategia real) sobrevive; los 4 falsos positivos mueren
+    assert len(survive) == 1 and _SECTORAL_ID_SUBSTR in survive[0], f"survive={survive}"
+    assert len(kill) == 4
+
+
+def test_inoperable_horizon_rejected():
+    ok, why = estimate.is_operable_strategy({"titulo": "return predictability",
+        "abstract": "we predict one-second returns and go long the top wallets"})
+    assert not ok and "horizonte" in why
+
+
+def test_word_boundary_no_false_positive_carry():
+    # "carrying" NO debe disparar 'carry'; sin otra señal → no es estrategia
+    ok, _ = estimate.is_operable_strategy({"titulo": "A stress index",
+        "abstract": "the index, carrying a per-node decomposition, names the asset along the network"})
+    assert not ok
