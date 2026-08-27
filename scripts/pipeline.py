@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import argparse
 
-from src.pipeline import backfill, db, discover, learning_report
+from src.pipeline import backfill, db, discover, estimate, learning_report
 from src.pipeline import triage_costs, triage_operability
 
 
@@ -50,12 +50,16 @@ def cmd_triage(conn, args):
         if op.decision == "reject":
             print(f"  {c['id']:24s} OP reject — {op.razon}")
             continue
-        # sólo los que pasan operabilidad entran al triaje de costos
+        # E2.5: estimar de forma DETERMINISTA los campos que el triaje de costos necesita
+        # (frecuencia, duty, bruto reportado si está en el abstract). Sin esto, arXiv no se
+        # puede cost-triar (los campos vienen vacíos). Ver src/pipeline/estimate.py.
+        est = estimate.estimate_fields(c)
+        db.upsert(conn, {"id": c["id"], **est})
         row = db.get(conn, c["id"])
-        if row.get("duty_cycle_estimado") is None:
-            print(f"  {c['id']:24s} OP keep — falta duty_cycle_estimado para el triaje de costos")
-            continue
         co = triage_costs.apply(conn, c["id"], row)
+        # prioridad determinista (para ordenar el procesamiento en sesión)
+        row = db.get(conn, c["id"])
+        db.upsert(conn, {"id": c["id"], "score_prioridad": estimate.priority_score(row)})
         print(f"  {c['id']:24s} OP keep · COSTO {co.decision} — {co.razon}")
 
 

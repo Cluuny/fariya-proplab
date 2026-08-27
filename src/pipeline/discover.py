@@ -24,7 +24,7 @@ import xml.etree.ElementTree as ET
 
 from src.pipeline.db import TIPOS_DE_FUENTE
 
-ARXIV_API = "http://export.arxiv.org/api/query"
+ARXIV_API = "https://export.arxiv.org/api/query"  # http 301-redirige y rompe urlopen
 ARXIV_CATS = ("q-fin.PM", "q-fin.ST", "q-fin.TR")
 # q-fin.TR (Trading & Market Microstructure) está infrarrepresentado en el barrido por
 # categoría; una consulta por TÉRMINOS lo rescata (order flow, LOB, price impact, VPIN...).
@@ -49,13 +49,20 @@ def _http_get(url: str, timeout: float = 20.0) -> str:
 # ---------------------------------------------------------------- arXiv (Atom)
 def arxiv_query_url(cats=ARXIV_CATS, *, terms=None, max_results: int = 50, start: int = 0) -> str:
     """Build an arXiv query URL. `cats` OR'd as cat: filters; optional `terms` OR'd as
-    quoted all: phrase searches (used for the microstructure sweep of q-fin.TR)."""
-    import urllib.parse
+    quoted all: phrase searches (used for the microstructure sweep of q-fin.TR).
 
-    clauses = [f"cat:{c}" for c in cats]
-    for t in (terms or ()):
-        clauses.append('all:"' + urllib.parse.quote(t) + '"')
-    query = "+OR+".join(clauses)
+    arXiv's Lucene syntax wants phrase quotes encoded as %22 and intra-phrase spaces as '+';
+    a literal '"' or '%20' inside the phrase makes the API return HTTP 400.
+
+    When `terms` are given they are AND-scoped to the categories: `(cat:… OR …) AND (all:"…" OR …)`.
+    Without the AND-scope, an unconstrained `all:"high frequency"` OR-clause pulls in physics/CS
+    papers from the whole of arXiv. (Both bugs found in the first live run, pipeline-first-live-run.)"""
+    cat_clause = "+OR+".join(f"cat:{c}" for c in cats)
+    if terms:
+        term_clause = "+OR+".join(f'all:%22{"+".join(t.split())}%22' for t in terms)
+        query = f"%28{cat_clause}%29+AND+%28{term_clause}%29"
+    else:
+        query = cat_clause
     return (
         f"{ARXIV_API}?search_query={query}&start={start}&max_results={max_results}"
         "&sortBy=submittedDate&sortOrder=descending"
