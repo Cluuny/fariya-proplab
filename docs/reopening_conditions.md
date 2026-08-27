@@ -44,6 +44,17 @@ horizonte, IC medido con IC95, y la muestra out-of-sample.
 - Una corazonada, una familia «nueva» por intuición, o «el mercado cambió».
 - Un IC o un N_eff ESTIMADO con proxies o supuesto — sólo cuenta lo MEDIDO.
 
+## Estado HOY — ninguna condición se cumple, con el número (2026-08-26)
+
+| condición | umbral | medido hoy | ¿se cumple? |
+|---|---|---|---|
+| **C1** amplitud | N_eff medido ≥ 14 | **8.15** (futuros, el universo más ancho accesible; cripto gratis 2.16) | **NO** |
+| **C2** objetivo | listón revisado a la baja y aceptado ANTES | objetivo sigue en **0.40 neto** (sin revisión aceptada) | **NO** |
+| **C3** señal | IC ≥ 0.10 medido out-of-sample | ningún efecto midió IC ≥ 0.10 (OFI ~0, H008 negativo; mejor bruto 0.495 ya limitado por amplitud) | **NO** |
+
+**Ninguna de las tres se cumple hoy. El programa permanece CERRADO.** Para reabrir hay que mover
+uno de estos tres números por encima de su umbral y citarlo — no reinterpretar los existentes.
+
 ## Procedimiento
 
 Una reapertura empieza con un documento `docs/reopening_<fecha>.md` que (1) cita C1, C2 o C3 con

@@ -7,9 +7,23 @@ sí solo.** El programa se REABRE únicamente si se cumple una de las tres condi
 `docs/reopening_conditions.md`, citando cuál y con el número — nunca por corazonada.
 
 Dos ciclos, nueve familias con veredicto, **cero supervivientes**, y —medido de raíz— **ningún
-terreno accesible con la AMPLITUD para generar un edge que despeje el listón** (§1.7-1.8). No es
+terreno accesible con la AMPLITUD para generar un edge que despeje el listón** (§1.7-1.10). No es
 un fracaso: es lo que produce un programa con falsadores honestos, suelo de costes medido, cribado
 de amplitud, y veredictos sin adornos cuando el terreno no da un edge que supere el suelo.
+
+## Las CUATRO confirmaciones independientes del cierre
+
+El cierre no descansa en un solo número: cuatro medidas independientes, desde cuatro ejes
+distintos, dan el mismo veredicto — **lo requerido está por encima de lo alcanzable (0.32-0.37)**:
+
+| eje | sección | requerido | alcanzable | veredicto |
+|---|---|---|---|---|
+| **Suelo de costes** | §1.2 | bruto **0.64** (CFD, net 0.40) | 0.37 trend / 0.495 carry (no desplegable) | no despeja |
+| **Amplitud del terreno** | §1.7 | **N_eff ≥ 14** (para 0.50 a IC 0.05) | N_eff **8.15** (futuros, el más ancho) | no despeja |
+| **Economía del payout** | §1.8 | bruto **0.50-0.80** (P(éxito) 50-80%) | 0.32-0.37 (≤ moneda al aire) | no despeja |
+| **Volatilidad objetivo** | §1.9 | — (óptimo **8%**; EV ~$3.3k/año a 0.37) | subir vol INVIERTE el EV a negativo | no rescata |
+
+Cuatro caras de **UNA** restricción estructural (§1.10): la amplitud efectiva del terreno accesible.
 
 ## Las nueve familias, con veredicto y números (1.1)
 
@@ -182,7 +196,36 @@ ejecutó: decirlo con el número es más informativo que cuatro corridas más.**
 cierre es relativo al objetivo de 0.40 neto y a los IC bajos que el programa demostró; con la mitad
 de ambición o un IC elite el cálculo cambiaría, pero ninguno está sobre la mesa.)
 
-## La relectura — una restricción, nueve veces (1.8)
+## La economía del payout — el cierre desde el lado del INGRESO (1.8)
+
+`src/challenge.py` (el simulador de barrera de la semana 4) aplicado por primera vez al ciclo
+completo de fondeo (`docs/funded_sharpe_requirement.md`). **El Sharpe BRUTO mínimo para pasar,
+ganar y sobrevivir es ~0.5** (P(éxito)≥50%, moneda al aire) **a ~0.8** (70-80%, ingreso fiable),
+donde P(éxito) = P(pasar ambas fases) × P(sobrevivir 12 ciclos). Lo desplegable —trend 0.37,
+industria CTA 0.32— queda EN o por DEBAJO de la moneda al aire; el mejor que el programa midió,
+H002 0.495, roza el 50% pero NO es desplegable (concentración, §1.10). **El negocio de fondeo
+exige justo el Sharpe que el terreno no da** — la misma pared, vista desde el payout en vez del
+suelo de costes. (Todos los caveats del modelo —supervivencia optimista, retornos normales—
+empujan el requerido hacia ARRIBA.)
+
+## La sensibilidad a la volatilidad objetivo (1.9)
+
+Un hallazgo intermedio —P(quemar)≈0 en el barrido inicial— sugirió que quizá la restricción de
+vol al 8% (§2.1 del documento maestro) estaba mal calibrada y una vol alta rendiría más sin que la
+barrera mordiera. Se testeó (`docs/funded_vol_sensitivity.md`) y se REFUTÓ. El modelo normal
+ingenuo dice que subir la vol mejora el valor esperado; al levantar los tres caveats
+—supervivencia ACUMULATIVA (no independiente), retornos REALES con colas (curtosis ~3.2), y límite
+diario INTRADÍA— la barrera muerde por encima de ~12% de vol (P(quemar 12): 15%→0.83, 20%→0.97) y
+el EV se INVIERTE a negativo. **El óptimo sigue siendo ~8% (EV ~$3.3k/año a Sharpe 0.37 sobre una
+cuenta de 300k que hay que alcanzar) → la restricción de §2.1 queda VINDICADA.**
+
+**Autocorrección registrada:** el P(quemar)≈0 era un ARTEFACTO DOBLE (sólo se barrió vol ≤10% Y se
+usó supervivencia independiente, ambas optimistas). El análisis de volatilidad, con la supervivencia
+acumulativa, lo refutó — la barrera muerde ya a 8% (~0.15-0.22). Es un ejemplo de que el sistema
+CORRIGE SUS PROPIAS CONCLUSIONES: una lectura provisional se marcó, se testeó y se retractó con el
+número, igual que el nulo defectuoso de H008 o la coincidencia mal emparejada.
+
+## La relectura — una restricción, nueve veces (1.10)
 
 Con el cierre por amplitud (§1.7) en la mano, las nueve muertes se leen distinto de como se
 leyeron en su momento. **Al menos 5 de las 9 no murieron por lo que creímos entonces (coste,
@@ -212,7 +255,8 @@ programa no necesitaba una décima familia; necesitaba amplitud que el terreno n
 
 Dos ciclos, dos vehículos (CFD spot y cripto perp), nueve familias, cero edge que supere el
 suelo — y, medido de raíz, **ningún terreno accesible con la amplitud para generarlo** (§1.7),
-que en la relectura (§1.8) resulta ser la MISMA restricción tras al menos 5 de las 9 muertes. El
+confirmado desde CUATRO ejes independientes (coste §1.2, amplitud §1.7, payout §1.8, vol §1.9),
+que en la relectura (§1.10) resulta ser la MISMA restricción tras al menos 5 de las 9 muertes. El
 programa convirtió "¿funciona X?" en números falsables y mató cada idea por la razón correcta antes
 de arriesgar capital, y finalmente midió que el límite no era una idea más sino la AMPLITUD del
 terreno al que se tiene acceso. Lo que sigue no es otra familia ni otra corrida: es medir la

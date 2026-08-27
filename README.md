@@ -9,13 +9,14 @@ with a pre-registered falsifier and a measured verdict; plus a blind research pi
 candidates) and a terrain-breadth screen (effective number of independent bets, N_eff, across
 every accessible universe).
 
-**What it concluded.** **Zero survivors.** No accessible universe ($125/mo budget) has the
-*breadth* for any signal to clear the floor: crypto (free, unlimited) N_eff **2.16**, the widest
-accessible (CME futures, ~$50/mo) **8.15**, IR ceiling ~**0.14** vs a required **0.64**. The nine
-deaths were **one structural constraint — breadth — manifesting nine times**, not nine independent
-failures. Own findings recorded: ĉ≈2.5-3.0 in crypto microstructure, trade imbalance not subsumed,
-profile levels not redundant (26%); and an independent paper (arXiv 2608.21888) replicates the
-same cost-beats-signal wall. Full verdict: **`docs/program_verdict.md`**.
+**What it concluded.** **Zero survivors**, confirmed from **four independent axes** (all say
+*required > achievable ~0.32-0.37*): cost floor (0.64 required), **breadth** (N_eff 8.15 accessible
+vs ≥14 needed), payout economics (0.50-0.80 required), and volatility (optimum ~8%; higher vol
+inverts expected value). The nine deaths were **one structural constraint — the breadth of the
+accessible terrain — manifesting nine times**, not nine independent failures. Own findings: ĉ≈2.5-3.0
+in crypto microstructure, trade imbalance not subsumed, profile levels not redundant (26%), crypto
+N_eff **2.16**; and an independent paper (arXiv 2608.21888) replicates the cost-beats-signal wall.
+Full verdict: **`docs/program_verdict.md`**.
 
 **Reopening.** Only if an objective condition in **`docs/reopening_conditions.md`** is met
 (N_eff ≥ 14, a revised/accepted lower objective, or a measured IC ≥ 0.10) — cited with the number.

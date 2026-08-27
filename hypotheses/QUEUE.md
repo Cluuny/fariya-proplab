@@ -1,11 +1,13 @@
 # Cola de hipótesis — PropLab · **PROGRAMA CERRADO**
 
 > **CIERRE FORMAL (2026-08-26, change program-close).** Nueve familias con veredicto, CERO
-> supervivientes; y —medido de raíz— ningún terreno accesible con la AMPLITUD para despejar el
-> listón (`docs/terrain_breadth.md`). La cola está VACÍA de candidatos viables. El veredicto
-> completo y la relectura por amplitud están en `docs/program_verdict.md`. **El programa se
-> reabre únicamente si se cumple una de las tres condiciones objetivas de
-> `docs/reopening_conditions.md`, citando cuál y con el número.**
+> supervivientes; confirmado desde CUATRO ejes independientes (suelo de costes, amplitud del
+> terreno, economía del payout, volatilidad objetivo), todos con el mismo veredicto: lo requerido
+> (0.50-0.80 bruto / N_eff ≥ 14) está por encima de lo alcanzable (0.32-0.37 / N_eff 8.15). La cola
+> está VACÍA de candidatos viables. El veredicto completo, las cuatro confirmaciones y la relectura
+> por amplitud están en `docs/program_verdict.md`. **El programa se reabre únicamente si se cumple
+> una de las tres condiciones objetivas de `docs/reopening_conditions.md` (ninguna se cumple hoy),
+> citando cuál y con el número.**
 
 Estado de las hipótesis del pipeline de investigación (Flujo 2). Las fichas
 `pre_registradas` o activas viven en `hypotheses/`; las cerradas se mueven a
