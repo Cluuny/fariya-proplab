@@ -1,0 +1,211 @@
+# H009 — AMT continuación: ACEPTACIÓN fuera del área de valor → continuación.
+# SÓLO LA FICHA. El FALSADOR y la regla testeable se escriben ANTES de correr nada. Cero código,
+# cero corridas, cero acceso a datos. Sigue el esquema de H008 (hypotheses/H008_amt_volume_profile.yaml).
+
+id: H009
+
+# --- JUSTIFICACIÓN — por qué esto NO es caza de variantes de H008 ---
+justificacion:
+  no_es_variante: >
+    H008 probó FADE: extensión fuera del VA + RECHAZO → operar hacia el POC (reversión). Murió con
+    Sharpe activo -0.067 vs listón 0.961. H009 prueba la CARA OPUESTA de la MISMA teoría de subasta:
+    ACEPTACIÓN fuera del VA → continuación en la dirección de la extensión. NO es la misma hipótesis
+    con otros parámetros — es el MECANISMO ECONÓMICO INVERSO.
+      H008: el precio fuera de valor es RECHAZADO y vuelve → reversión (mean_reversion).
+      H009: el precio fuera de valor es ACEPTADO y el valor MIGRA → tendencia (momentum).
+    La teoría de subasta contiene ambos: balance produce reversión, desequilibrio produce
+    continuación. H008 sólo probó el primero. La literatura de vendedores (Schwab, ATAS, EBC)
+    describe explícitamente el segundo (perfil desequilibrado, POC en la parte alta del rango,
+    forma p → se lee como tendencia, no reversión).
+  relacion_con_el_cierre: >
+    El programa está CERRADO (v1.2-closed, cinco confirmaciones). H009 NO es una reapertura ni una
+    apuesta a que pase: es CERRAR la otra cara de AMT para que la familia quede completa. Usa datos
+    YA descargados (sin clase nueva, sin nuevo acceso), no toca el holdout, y su expectativa es
+    MUERTA/UNDERPOWERED — coherente con el cierre por amplitud (N_eff efectivo del par BTC/ETH ~1.1).
+
+# --- FUENTE / literatura (registrar la debilidad estructural sin adornos) ---
+fuente:
+  tipo: no_arbitrado
+  cita: "Auction Market Theory (Steidlmayer, Market Profile); cara de CONTINUACIÓN por desequilibrio"
+  url: null
+  fecha_publicacion: null
+nota_literatura: >
+  El cribado de internet (2026-08-29) NO encontró ninguna validación empírica RIGUROSA de AMT en 40
+  años. Todo es material educativo de vendedores de plataforma, contenido de prop firms y scripts de
+  TradingView de pago. El único backtest público hallado ("26.000 operaciones en verde") tiene
+  parámetros libres SIN corrección por multiplicidad. **NO HAY UN BRUTO REPORTADO CREÍBLE contra el
+  que anclar la expectativa.** Es una debilidad ESTRUCTURAL de la familia y se registra como tal: la
+  expectativa comprometida se deriva de lo PROPIO (H008 + suelo de costes + amplitud), no de la
+  literatura.
+
+# --- CLASIFICACIÓN ---
+familia: microstructure
+mecanismo: >
+  Cuando el precio se ACEPTA fuera del área de valor previa, la subasta está en DESEQUILIBRIO y el
+  valor MIGRA en la dirección de la extensión. Contraparte (filtro 4, quién está del otro lado y por
+  qué pierde): (a) los que operan la REVERSIÓN (el setup de H008) y son arrollados cuando el valor no
+  vuelve; (b) los rezagados que reconocen el nuevo valor tarde y persiguen el movimiento.
+  NOTA HONESTA: este mecanismo es ESPECULATIVO, sin literatura arbitrada. Es MÁS DÉBIL que el de
+  trend (subreacción conductual + demanda de hedging) o carry (prima por riesgo de crash).
+explicacion_economica: conductual + estructura de subasta (desequilibrio; NO verificada empíricamente)
+estructura: time_series
+direccionalidad: momentum        # continuación en la dirección de la extensión (NO mean_reversion)
+clase_de_dato: flujo             # volumen traded por nivel de precio
+frecuencia: intraday_bar
+
+# --- OPERABILIDAD / DATOS (fijados AHORA) ---
+instrumentos: [BTCUSDT, ETHUSDT]   # ETH desde el inicio: duplica T, evita un veredicto irresoluble
+n_instrumentos: 2
+concesion_correlacion: >
+  BTC y ETH correlacionan ρ≈0.8 → el par vale N_eff efectivo ~1.1, no 2. La T efectiva descuenta por
+  ese factor (N_eff par = 2/(1+0.8) = 1.11×). Concesión documentada, aceptable para un test de cierre.
+datos_requeridos: [aggTrades, klines_1m]
+datos_ya_disponibles: true         # data.binance.vision, gratis, YA ingerido y verificado (in-sample)
+costo_datos_usd_mes: 0
+ventana_de_perfil: "rodante de 24 h previas (perfil DIARIO); VAH/VAL = área de valor del 70% (idéntico a H008)"
+bucket_de_precio: "$10 (100 ticks de $0.10) — primario; $5 como ÚNICO chequeo de robustez (contado, deflated Sharpe N=2)"
+operable_en_prop: true
+
+# --- CONTEXTO DETERMINISTA (ex-ante, sin ambigüedad; INVERSO al de H008) ---
+contexto_deterministico:
+  desequilibrio_previo: >
+    (1) el día PREVIO fue de DESEQUILIBRIO: (high−low)_prev / ATR(14) > 1.5. (H008 usó < 1.0 para
+    BALANCE; se fija 1.5 —no 1.0— para exigir un desequilibrio DECISIVO. La zona 1.0-1.5 es NEUTRA y
+    se EXCLUYE de ambas hipótesis, así que H008 y H009 no se solapan ni reclaman el medio ambiguo.)
+  extension: "(2) el precio extiende más allá del VAH o del VAL del perfil de las 24 h previas."
+  aceptacion: >
+    (3) ACEPTACIÓN, no rechazo: el mid PERMANECE fuera del VA durante K=3 barras de 1 min consecutivas.
+    (H008 usó K=3 para el RECHAZO —el mid RE-ENTRA en ≤3 barras—; aquí K=3 para la condición OPUESTA
+    —el mid NO re-entra en 3 barras—, mismo K para que las dos hipótesis sean COMPARABLES.)
+
+# --- REGLA (fijada AHORA; coherente con CONTINUACIÓN) ---
+regla_entrada: >
+  En régimen de desequilibrio, tras confirmar ACEPTACIÓN fuera del VA (K=3), entrar EN LA DIRECCIÓN
+  de la extensión con orden LÍMITE (maker) en el borde del VA: LONG si el precio se aceptó por ENCIMA
+  del VAH, SHORT si por DEBAJO del VAL.
+regla_salida: >
+  El POC ya NO es objetivo (está DETRÁS, dentro del valor que se abandona). Geometría SIMÉTRICA
+  (para que el nulo con geometría preservada alcance objetivo ~50%):
+    - objetivo: 1.0 × rango_VA en la DIRECCIÓN de la extensión (el valor migra un área de valor más).
+    - stop:     1.0 × rango_VA EN CONTRA (vuelta al VA = tesis de aceptación rota).
+    - time-stop: cierre a las 24 h.
+
+# --- DISEÑO INCREMENTAL (obligatorio, misma lógica que H008) ---
+diseno_incremental:
+  ramas: >
+    Dos ramas PAREADAS sobre los MISMOS episodios (definidos por el CONTEXTO, no por los niveles):
+      (a) PERFIL: entra/opera con VAH/VAL del perfil de 24 h.
+      (b) SIMPLE: entra/opera con la banda de volatilidad de 1 DÍA (el emparejamiento corregido de H008).
+  medida: "Δ Sharpe (perfil − simple) por bootstrap PAREADO por episodio."
+  episodios_compartidos: "verificar y reportar cuántos episodios comparten ambas ramas (como en H008: 268/341)."
+
+# --- BENCHMARK NULO — con la GEOMETRÍA PRESERVADA (lección de H008) ---
+benchmark_nulo:
+  leccion_h008: >
+    El nulo de H008 tenía la GEOMETRÍA ROTA: aleatorizaba la entrada SIN reposicionar objetivo/stop,
+    así que el objetivo (POC) caía detrás de la entrada y el nulo daba Sharpe -3.4 en todos los
+    percentiles; "superar su p95" no significaba nada (la condición 3 no discriminaba). Se retiró.
+  descripcion: >
+    AQUÍ: nivel de entrada ALEATORIO dentro del rango del día, PERO con objetivo y stop
+    REPOSICIONADOS coherentemente respecto a esa entrada, de forma que la distancia objetivo/stop sea
+    la MISMA que en la rama real (1.0 × rango_VA cada uno, simétricos).
+  verificacion_de_sanidad: >
+    El nulo DEBE alcanzar objetivo ~50% de las veces (geometría simétrica). Si da Sharpe muy
+    negativo, la geometría sigue rota y el test NO vale — se corrige antes de usarlo.
+  remuestreos: 1000
+  semilla: 20260829              # fija, para reproducibilidad
+  reporte: "p95 de la distribución nula del Sharpe (activo)"
+
+# --- SUELO DE COSTES (calculado ANTES) ---
+suelo_de_costes:
+  duty_cycle_estimado: 0.15      # a priori: los días de DESEQUILIBRIO (>1.5) son MENOS frecuentes que
+                                 # los de balance de H008 (~60%); imbalance ~20-25% × supervivencia de
+                                 # aceptación → ~0.15. El duty REAL se mide al correr (como H008: 0.20→0.31).
+  round_trips_por_dia_estimado: 0.15
+  fraccion_maker: 1.0            # órdenes límite en el borde del VA
+  funding_evitado: true         # intradía, cierra antes de los cortes 00/08/16 UTC
+  sharpe_activo_requerido: 1.28  # 0.40/√0.15 + 0.245  (MÁS ALTO que el 0.96 de H008: menor duty → listón más alto)
+  binding: >
+    El binding será el Sharpe ACTIVO (~1.28), como en H008 (más alto que el suelo de coste de perp por
+    unidad de tiempo). El listón exacto se recalcula sobre el duty REAL medido.
+
+# --- PODER ESTADÍSTICO ---
+poder_estadistico:
+  formula: "SE(Ŝ) ≈ √((1 + S²/2)/T), T = nº de EPISODIOS independientes (no barras), descontado por ρ0.8"
+  episodios_estimados: >
+    Sobre 1094 día-instrumento (BTC+ETH, 2022-09→2024-02): desequilibrio (>1.5) ~20% de los días ×
+    extensión × aceptación (K=3) → ~100-160 episodios crudos; descontado por ρ0.8 (par N_eff 1.11×) →
+    T efectiva ~60-120.
+  advertencia_underpowered: >
+    T efectiva ESTIMADA ~60-120 está POR DEBAJO o cerca del umbral 150 → RIESGO DE UNDERPOWERED,
+    DECLARADO ANTES de correr. Decisión: se ACEPTA el riesgo (es un test de CIERRE de la otra cara de
+    AMT, no una apuesta a promover), con el estado 'underpowered' disponible sobre todo en la dimensión
+    incremental (1b), donde ya se disparaba casi por construcción en H008. Si al medir T < 150, el
+    veredicto de la dimensión (1) será UNDERPOWERED, pero (2) y (3) se disparan sin depender del poder.
+  estado_underpowered_disponible: true
+
+# --- EXPECTATIVA COMPROMETIDA (escrita ANTES, con derivación) ---
+resultado_esperado:
+  sin_ancla_de_literatura: >
+    No hay bruto de literatura creíble contra el que anclar (ver nota_literatura). La expectativa se
+    deriva de lo PROPIO.
+  derivacion: >
+    (a) H008 —la cara OPUESTA de la misma teoría— dio Sharpe activo -0.067 (fade sin edge). (b) El
+    listón será ~1.0-1.5 según el duty del contexto de desequilibrio (aquí ~1.28 a duty 0.15). (c) El
+    terreno tiene N_eff efectivo ~1.1 (2 instrumentos a ρ0.8) — sin amplitud para compensar un edge débil.
+  sharpe_activo_esperado: "entre -0.3 y +0.3"
+  veredicto_esperado: "MUERTA (activo ≪ listón, o < p95 del nulo) o UNDERPOWERED (T < 150 en la dimensión incremental)"
+  probabilidad_previa: >
+    BAJA — por la MAGNITUD del listón (~1.28, casi 3× el mejor bruto del proyecto 0.495) y por la
+    AUSENCIA de bruto reportado creíble. Se corre para CERRAR la otra cara de AMT (¿la continuación por
+    desequilibrio da lo que el fade no dio?), NO esperando que pase. Registrar esto AHORA para que el
+    resultado no sorprenda. Es la PRIMERA vez que la expectativa no descarta de entrada un edge >0 (la
+    cara de continuación es la que la literatura de vendedores enfatiza), pero el listón y la amplitud
+    la mantienen baja.
+
+# --- FALSADOR (congelado, disparable) ---
+FALSADOR: >
+  H009 se descarta si SE CUMPLE CUALQUIERA de (1), (2), (3). Las tres son INDEPENDIENTES: el veredicto
+  GLOBAL puede ser MUERTA por (2) o (3) aunque (1) salga underpowered.
+   (1)  Δ Sharpe (perfil − simple, bootstrap pareado) ≤ 0 con IC95 que NO cruza 0 → el perfil es
+        REDUNDANTE con niveles simples, MUERTA.
+   (1b) IC95 del Δ CRUZA 0 → UNDERPOWERED en la dimensión incremental (NO muerta). Se reporta el punto
+        y el IC y se declara que la muestra no resuelve esa dimensión (con T~60-120 y S~0.5, SE(Ŝ)
+        grande → el IC del Δ sólo no cruza 0 si |Δ| es enorme; se separa "no hay efecto" (1) de "no se
+        puede resolver" (1b), como en H003/H007/H008).
+   (2)  Sharpe ACTIVO de la estrategia de perfil < p95 del NULO (con geometría PRESERVADA y VERIFICADA
+        al ~50% de objetivo) → no hay efecto sobre el benchmark que comparte exposición. MUERTA.
+   (3)  Sharpe ACTIVO < listón requerido (~1.28 al duty estimado; recalculado sobre el duty real) → NO
+        VIABLE. MUERTA.
+  No se reintenta con variantes salvo UN ÚNICO chequeo de robustez PRE-ESPECIFICADO Y CONTADO: bucket
+  $5 (vs el $10 primario), contabilizado con deflated Sharpe N=2. La sensibilidad de fills (abajo) es
+  OBLIGATORIA y separada, no cuenta como variante. Si (2) y (3) pasan pero (1) queda underpowered, el
+  estado GLOBAL es 'underpowered' y NO se toca el holdout.
+
+metrica_exito: >
+  Para PROMOVER (a confirmación en holdout) TODAS: Δ Sharpe (perfil − simple) > 0 con IC95 que no cruza
+  0; Sharpe activo > p95 del nulo (geometría verificada) Y > el requerido efectivo (~1.28 al duty real).
+  IR alcanzable = IC × √(12 × N_eff): con N_eff ~1.1 hace falta un IC enorme. El Sharpe es invariante al
+  apalancamiento.
+
+# --- SUPUESTO DE FILLS (reportar desde el diseño, como H008) ---
+supuesto_de_fills: >
+  Entradas LÍMITE (maker) en el borde del VA. Con klines 1 min no se sabe si la orden se habría llenado
+  (sólo si el precio tocó el nivel). SENSIBILIDAD OBLIGATORIA: (a) fill al TOQUE (infla) y (b) fill sólo
+  si el precio CRUZA el nivel por ≥5 bps (estricto), igual que en H008. El modelo de fills real no se
+  construye aquí; el veredicto lleva el supuesto encima y se reporta bajo ambos.
+
+# --- HOLDOUT ---
+holdout: respetado
+holdout_corte: "2024-03-01"        # mismo corte que H008
+muestra_planeada: "in-sample 2022-09-01 → 2024-02-29 (BTCUSDT + ETHUSDT), YA descargada y verificada"
+holdout_detalle: >
+  Sagrado: 2024-03-01 → 2024-08-31. NO se descarga. Se toca UNA vez y SÓLO si H009 pasa las TRES
+  condiciones in-sample (Δ>0 resoluble, activo > p95 del nulo, activo > requerido). Si muere por (2)/(3)
+  o sale underpowered, NO se toca.
+
+# --- GESTIÓN DE COLA ---
+score_prioridad: null
+estado: pre_registrado
+intentos_realizados: 0
+fecha_test: null

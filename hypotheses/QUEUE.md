@@ -10,6 +10,11 @@
 > primera, no. Veredicto completo en `docs/program_verdict.md`. **Reapertura sólo si se cumple una
 > de las tres condiciones de `docs/reopening_conditions.md` (ninguna hoy: N_eff 8.15<14; IC 0.077<0.10;
 > objetivo 0.20 no despeja), citando cuál con el número.**
+>
+> **Excepción registrada (2026-08-29):** H009 (AMT continuación) está PRE_REGISTRADO — la cara
+> opuesta de H008 (aceptación→continuación). NO es una reapertura ni un candidato viable: es un test
+> de CIERRE de la última cara abierta de la familia AMT, con datos ya descargados, sin tocar holdout,
+> probabilidad previa BAJA y expectativa MUERTA/UNDERPOWERED. La cola sigue VACÍA de candidatos viables.
 
 Estado de las hipótesis del pipeline de investigación (Flujo 2). Las fichas
 `pre_registradas` o activas viven en `hypotheses/`; las cerradas se mueven a
@@ -33,6 +38,7 @@ H005 = familia 5 (reversión a la media a nivel índice), H006 = familia 6
 | — | **COT** (posicionamiento, no-precio) | mean_reversion | **CRIBADA-FUERA** (sin ficha) | Fuente ingerida (8 instrumentos, `data/cot_coverage.md`). Cribado condicional (`docs/cot_diagnostic.md`): Sharpe activo del fade ≈ 0 (agrupado −0.02, IC cruza 0), signo del mecanismo roto en 5/8 → no pasa el criterio (≥1.1). H008 NO se escribe. |
 | H006 | Intermarket / macro | intermarket | **RECHAZADA-POR-COSTE** | Price-based, duty ~100% → requerido 0.64; sin evidencia de bruto alto (lead-lag decaído). Se cierra salvo diseño de bajo duty. `docs/queue_triage.md`. |
 | **H008** | AMT / Volume Profile (cripto) | microstructure | **MUERTA** (sellada 2026-08-25, `docs/h008_block4.md`) | Novena familia. Sharpe activo del fade -0.067 ≪ listón 0.961 (con fills ≥5bps -0.986) → no viable bajo ningún supuesto. Murió por la REGLA DE SUBASTA, no por redundancia (niveles de perfil distintos de los simples, coincidencia 26%). El benchmark nulo era defectuoso (geometría rota) y su condición se retiró del veredicto. Reabierta porque el libro de cripto (bookTicker/aggTrades, gratis, ya ingerido) da volumen por nivel de precio que FX no tenía. Diseño INCREMENTAL (Δ perfil − niveles simples, bootstrap pareado) + CONDICIONAL (contexto de balance). Universo BTCUSDT+ETHUSDT (T efectiva ~189-341 con duty real 0.31). Holdout INTACTO (nunca descargado — no pasó in-sample). Ficha `hypotheses/H008_amt_volume_profile.yaml`; reporte `docs/h008_block4.md`. (Distinto del "H008" que la nota de COT dejó sin escribir.) |
+| **H009** | AMT continuación (cripto) | microstructure | **PRE_REGISTRADO** (ficha 2026-08-29) | La CARA OPUESTA de H008: ACEPTACIÓN fuera del VA → continuación (momentum), no rechazo→reversión. Mecanismo económico INVERSO, no caza de variantes. **Completa la familia AMT; NO es una reapertura** (usa datos ya descargados, no toca holdout, probabilidad previa BAJA). Contexto de DESEQUILIBRIO (high−low/ATR14 > 1.5; la zona 1.0-1.5 excluida de ambas), aceptación K=3 (mismo K que el rechazo de H008), entrada límite en dirección de la extensión, geometría simétrica (objetivo/stop = 1×rango_VA). Nulo con GEOMETRÍA PRESERVADA (verificación de sanidad ~50% objetivo) — la lección de H008. Sin bruto de literatura creíble (el cribado de internet 2026-08-29 no halló validación empírica rigurosa de AMT en 40 años). Listón activo ~1.28 (duty ~0.15, menor que H008 → listón más alto); T efectiva estimada ~60-120 → RIESGO DE UNDERPOWERED declarado. Expectativa: Sharpe activo −0.3..+0.3, MUERTA o UNDERPOWERED. Ficha `hypotheses/H009_amt_continuation.yaml`. SÓLO FICHA — sin código/datos/corridas. |
 
 ## Resultado del pipeline de investigación (Flujo 2), corridas 001-003
 
