@@ -206,6 +206,39 @@ holdout_detalle: >
 
 # --- GESTIÓN DE COLA ---
 score_prioridad: null
-estado: pre_registrado
-intentos_realizados: 0
-fecha_test: null
+estado: muerta                # NO VIABLE (falsador cond. 3); ver resultado abajo
+intentos_realizados: 1
+fecha_test: 2026-08-29
+
+# --- RESULTADO (2026-08-29, change h009-run; FALSADOR y resultado_esperado NO tocados) ---
+# Reporte auto-suficiente: docs/h009_run.md. Datos ya descargados; holdout 2024-03→08 INTACTO (no descargado).
+resultado:
+  veredicto: NO_VIABLE
+  causa_de_muerte: falsador_condicion_3   # Sharpe activo ≪ listón de costes
+  # D1 — duty / T efectiva / listón (medidos ANTES del backtest, regla de parada del bloque)
+  duty_real: 0.092
+  embudo: {dias_validos: 1092, desequilibrio_prev: 170, extension: 153, aceptacion_K3: 101}
+  episodios_crudos: 101
+  t_efectiva: 73          # por coincidencia REAL BTC/ETH: 37 solo + 1.11×32 coincidentes (ρ0.8). >60 → RESOLUBLE.
+  t_efectiva_cota_cruda: 56   # 101×0.555 (asume todo coincidente) — disparó una PARADA falsa; corregida a 73
+  liston_activo_recalculado: 1.560   # 0.40/√0.092 + 0.245 (la ficha estimó ~1.28 a duty 0.15)
+  # D4 — rama perfil (VAH/VAL) vs simple (banda 1d), Sharpe ACTIVO
+  sharpe_activo_perfil: -1.190   # IC95 [-1.49, -0.89]
+  sharpe_activo_simple: -3.068   # IC95 [-3.54, -2.60]
+  delta_sharpe_perfil_menos_simple: 4.325   # IC95 [+2.874, +7.334], pareado sobre 72 compartidos
+  # D5 — nulo (geometría preservada, semilla 20260829, 1000 resamples)
+  nulo_objetivo_pct: 0.09        # sanidad ~50% FALLA → geometría marcada ROTA → cond. (2) NO usada (conservador)
+  nulo_geometria_ok: false       # mecanismo: objetivo ±1×rango_VA es LEJANO (no detrás, no es el defecto de H008)
+  nulo_p95: -0.484
+  p_valor_empirico: 0.267
+  # D6 — sensibilidad de fills: con cruce ≥5bps activo -1.086 (base -1.190); veredicto NO cambia
+  # D8 — expectativa: resultado_esperado fijó Sharpe activo -0.3..+0.3 y MUERTA/UNDERPOWERED.
+  #      Medido -1.190 → FUERA del rango (más negativo). Dirección (muerta/no-viable) CUMPLIDA; magnitud REFUTADA
+  #      (peor de lo esperado). Sin interpretar a favor.
+  expectativa_direccion: cumplida
+  expectativa_magnitud: refutada   # -1.190 fuera de [-0.3,+0.3]
+  # LECTURA: ambas caras de AMT sobre niveles de perfil cierran negativo — fade (H008) -0.067, continuación (H009)
+  # -1.190. Los niveles de perfil NO son redundantes (Δ vs simple +4.3, no cruza 0) pero la REGLA de subasta
+  # (rechazo→reversión y aceptación→continuación) no genera edge neto en cripto. Familia AMT completa y cerrada.
+  reporte: docs/h009_run.md
+  holdout_tocado: false
